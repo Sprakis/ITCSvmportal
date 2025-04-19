@@ -11,9 +11,11 @@ dotenv==0.9.9
 frozenlist==1.6.0
 hawk-python-sdk==3.5.2
 idna==3.10
+ldap3==2.9.1
 magic-filter==1.0.12
 multidict==6.4.3
 propcache==0.3.1
+pyasn1==0.6.1
 pydantic==2.11.3
 pydantic_core==2.33.1
 python-dotenv==1.1.0
