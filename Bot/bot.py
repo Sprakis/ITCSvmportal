@@ -17,8 +17,8 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, K
 load_dotenv()
 work_dir = os.path.abspath(os.getcwd())
 
-# sys.path.append("modules")
-# from ldap_auth import ldap_logon
+sys.path.append("modules")
+from ldap_auth import ldap_logon
 
 # hawk = Hawk(os.getenv("HAWK_key"))
 bot = Bot(token=os.getenv("telegram_api_key"))
@@ -47,6 +47,33 @@ async def command_start_handler(message: Message) -> None:
 	login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
 
 	await message.answer(f"Привет-привет *{message.chat.username}* пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
+
+
+
+@dp.message(F.content_type == ContentType.WEB_APP_DATA)
+async def web_app_logon(message: Message) -> None:
+	login_button = [KeyboardButton(text = f"Авторизироваться как {message.chat.username}", web_app = webapp)]
+	login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
+
+	credentionals = json.loads(message.web_app_data.data)
+	chat_id = message.chat.id
+	tg_username = message.chat.username
+	ldap_access, ldap_access_level, ldap_username, ldap_fullname = ldap_logon(work_dir, credentionals)
+	
+	if ldap_access:
+		if ldap_access_level == "User":
+			keyboard = ldap_access_level
+		elif ldap_access_level == "Admin":
+			keyboard = ldap_access_level
+		else:
+			keyboard = None
+		
+		if keyboard:
+			await bot.send_message(chat_id = chat_id, text = f"Добро пожаловать *{ldap_fullname}*!\nУровень доступа: _{ldap_access_level}_", parse_mode = 'Markdown', reply_markup=ReplyKeyboardRemove())
+		else:
+			await bot.send_message(chat_id = chat_id, text = "К сожалению у вас нет доступа", reply_markup = login_keyboard)
+	else:
+		await bot.send_message(chat_id = chat_id, text = "Неверный логин или пароль", reply_markup = login_keyboard)
 
 async def main() -> None:
 	config = bot_config_read()
