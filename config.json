@@ -1,0 +1,17 @@
+{
+	"logs": {
+		"file": "./logs.txt",
+		"level": "debug"
+	},
+	"databases": {
+		"redis": {
+			"port": 6379,
+			"url": "127.0.0.1"
+		}
+	},
+	"ldap": {
+		"ip": ["10.1.101.5", "10.1.101.6"],
+		"user_group": "ISSvmUsers",
+		"admin_group": "ISSvSphereAdministrators"
+	}
+}

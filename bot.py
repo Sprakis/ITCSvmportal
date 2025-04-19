@@ -51,7 +51,6 @@ async def command_start_handler(message: Message) -> None:
 async def main() -> None:
 	config = bot_config_read()
 
-    logger = logging.getLogger(__name__)
 	logging.basicConfig(
 		level = logging.getLevelName(config["logs"]["level"].upper()),
 		filename = config["logs"]["file"],
