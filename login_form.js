@@ -5,13 +5,10 @@ function start_func() {
 	telegramApp.MainButton.text = "Sign in";
 	telegramApp.MainButton.color = "#ff0000";
 	telegramApp.MainButton.show();
-
-	function send() {
+	telegramApp.MainButton.onClick(function send() {
 		let login = document.getElementById('username').value;
 		let pass = document.getElementById('password').value;
 		let creds = '{\n\t"login": "' + login + '",\n\t"pass": "' + pass + '"\n}';
 		telegramApp.sendData(creds);
-	};
-
-	telegramApp.MainButton.onClick(send());
+	});
 };
