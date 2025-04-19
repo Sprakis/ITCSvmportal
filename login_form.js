@@ -11,8 +11,7 @@ function start_func() {
 		let pass = document.getElementById('password').value;
 		let creds = '{\n\t"login": "' + login + '",\n\t"pass": "' + pass + '"\n}';
 		telegramApp.sendData(creds);
-		console.log("send_by_click")
-	}
+	};
 
-	telegramApp.MainButton.onClick(send())
+	telegramApp.MainButton.onClick(send());
 };
