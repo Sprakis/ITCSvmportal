@@ -7,21 +7,22 @@
 <script src="login_form.js"></script>
 <meta charset="UTF-8">  
 <form class="registration-form">
-   <!-- <img width="300px" src="https://sezinnopolis.ru/upload/iblock/948/7ow987qpdtl6oegz4ny1wqazzia41u0t.jpg"> -->
   <img width="300px" src="./logo.svg"> 
     <h2></h2>
     <h1>ITCS VM Portal</h1>
     <div class="input-container">
       <div class="input-block">
         <input type="text" id="username" placeholder=" " />
-        <label for="nick">Логин</label>
+        <label for="username">Логин</label>
       </div>
     </div>
     <div class="input-container">
       <div class="input-block">
         <input type="password" id="password" placeholder=" " />
         <label for="nick">Пароль</label>
+        <input type="checkbox" id="show-password" onclick="togglePassword()"> Показать пароль
       </div>
     </div>
+    <button type="submit">Войти</button>
   </form>
 </body>
