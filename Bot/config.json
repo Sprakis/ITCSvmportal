@@ -1,6 +1,6 @@
 {
 	"logs": {
-		"file": "./logs.txt",
+		"file": "logs.txt",
 		"level": "debug"
 	},
 	"databases": {
@@ -13,5 +13,13 @@
 		"ip": ["10.1.101.5", "10.1.101.6"],
 		"user_group": "ISSvmUsers",
 		"admin_group": "ISSvSphereAdministrators"
+	},
+	"timerman": {
+		"logs": {
+			"file": "timerman_logs.txt",
+			"level": "debug"
+		},
+		"check_session_pause": 60,
+		"session_seconds_timeout": 3600
 	}
 }
