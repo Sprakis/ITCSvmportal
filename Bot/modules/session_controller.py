@@ -2,7 +2,7 @@ import hashlib
 import datetime
 import logging
 
-def new_session(session_db_redis, tg_username, chat_id, ldap_username, access_level) -> bool:
+def new_session(session_db_redis, tg_username: str, chat_id: int, ldap_username: str, access_level: str) -> bool:
 	h_user = hashlib.sha256(bytes(f'{tg_username}', 'UTF-8')).hexdigest()
 	logging.debug(f"User: {tg_username}, session: {h_user}")
 	
@@ -27,7 +27,7 @@ def new_session(session_db_redis, tg_username, chat_id, ldap_username, access_le
 def update_session():
 	return 1
 
-def exit_session(session_db_redis, tg_username) -> bool:
+def exit_session(session_db_redis, tg_username: str) -> bool:
 	h_user = hashlib.sha256(bytes(f'{tg_username}', 'UTF-8')).hexdigest()
 	try:
 		session_db_redis.lrem("active_sessions", 0, h_user)

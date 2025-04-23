@@ -10,13 +10,13 @@ from dotenv import load_dotenv
 from aiogram import Bot
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
-# load_dotenv()
+load_dotenv()
 
 def bot_config_read() -> dict:
 	with open("./config.json") as config_file:
 		return json.load(config_file)
 
-def redis_connect(session_db_redis) -> bool:
+def redis_connect(session_db_redis: session_db_redis) -> bool:
 	return session_db_redis.ping()
 
 async def session_killer() -> None:
@@ -26,6 +26,7 @@ async def session_killer() -> None:
 		host=config["url"],
 		port=config["port"],
 		password = os.getenv("redis_password"),
+		db = os.getenv("redis_session_db"),
 		decode_responses=True
 	)
 

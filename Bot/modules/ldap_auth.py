@@ -7,7 +7,7 @@ def bot_config_read() -> dict:
 	with open("./config.json") as config_file:
 		return json.load(config_file)
 
-def ldap_logon(work_dir, credentionals) -> dict:
+def ldap_logon(credentionals: dict[str]) -> dict:
 	# Получение учетных данных пользователя
 	user_username = credentionals["login"]
 	user_password = credentionals["pass"]

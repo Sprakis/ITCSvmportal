@@ -14,7 +14,7 @@ from aiogram.fsm.state import State, StatesGroup, default_state
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, CallbackQuery, WebAppInfo, ContentType
 
-# load_dotenv()
+load_dotenv()
 work_dir = os.path.abspath(os.getcwd())
 
 sys.path.append("modules")
@@ -37,6 +37,7 @@ session_db_redis = redis.StrictRedis(
 		host=config["url"],
 		port=config["port"],
 		password = os.getenv("redis_password"),
+		db = os.getenv("redis_session_db"),
 		decode_responses=True
 )
 
@@ -67,7 +68,7 @@ async def web_app_logon(message: Message) -> None:
 	credentionals = json.loads(message.web_app_data.data)
 	chat_id = message.chat.id
 	tg_username = message.chat.username
-	ldap_access, ldap_access_level, ldap_username, ldap_fullname = ldap_logon(work_dir, credentionals)
+	ldap_access, ldap_access_level, ldap_username, ldap_fullname = ldap_logon(credentionals)
 	
 	report_button = InlineKeyboardButton(text = "Сообщить о проблеме (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "report_menu")
 	end_session_button = InlineKeyboardButton(text = "Завершить сессию🚪", callback_data = "session_end")
