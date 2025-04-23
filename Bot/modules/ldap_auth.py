@@ -54,4 +54,6 @@ def ldap_logon(work_dir, credentionals) -> dict:
 					group = None
 			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nUser Priv={group}")
 			return 1, group, user_username, fullname
+		else:
+			logging.debug(f"Incorrect credentionals for LDAP://{ldap_ip}@{domain}\\{user_username}")
 	return 0, None, user_username, None 
