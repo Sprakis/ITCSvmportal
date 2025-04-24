@@ -16,7 +16,7 @@ def bot_config_read() -> dict:
 	with open("./config.json") as config_file:
 		return json.load(config_file)
 
-def redis_connect(session_db_redis: session_db_redis) -> bool:
+def redis_connect(session_db_redis) -> bool:
 	return session_db_redis.ping()
 
 async def session_killer() -> None:
@@ -48,7 +48,7 @@ async def session_killer() -> None:
 				logging.info(f"Сессия {session_hash} удалена из активных")
 				chat_id = session_db_redis.hget(session_hash, "chat_id")
 				username = session_db_redis.hget(session_hash, "tg_username")
-				session_db_redis.hdel(session_hash, 'tg_username', 'chat_id', 'ldap_username', 'access_level', 'session_update_time')
+				session_db_redis.hdel(session_hash, 'tg_username', 'chat_id', 'ldap_username', 'ldap_fullname', 'access_level', 'session_update_time')
 				logging.debug(f"Данные сессии {session_hash} удалены")
 			except:
 				logging.error(f"Ошибка при авточистке сессии {session_hash}")

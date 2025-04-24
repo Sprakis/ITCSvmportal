@@ -19,7 +19,7 @@
 			"file": "timerman_logs.txt",
 			"level": "debug"
 		},
-		"check_session_pause": 60,
-		"session_seconds_timeout": 3600
+		"check_session_pause": 5,
+		"session_seconds_timeout": 10
 	}
 }
