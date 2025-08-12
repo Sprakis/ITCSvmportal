@@ -7,12 +7,16 @@
 		"redis": {
 			"port": 6379,
 			"url": "127.0.0.1"
+		},
+		"psql": {
+			"url": "127.0.0.1",
+			"port": 5432
 		}
 	},
 	"ldap": {
 		"ip": ["10.1.101.5", "10.1.101.6"],
-		"user_group": "ISSvmUsers",
-		"admin_group": "ISSvSphereAdministrators"
+		"user_group": "ISS_vmPB_user",
+		"admin_group": "ISS_vmPB_admin"
 	},
 	"timerman": {
 		"logs": {
@@ -20,6 +24,7 @@
 			"level": "debug"
 		},
 		"check_session_pause": 60,
-		"session_seconds_timeout": 3600
+		"session_seconds_timeout": 3600,
+		"notification_delete_timer_sec": 15
 	}
 }
