@@ -31,11 +31,11 @@ def ldap_logon(credentionals: dict[str]) -> dict:
 	# Последовательная проверка авторизации на контроллерах домена
 	for ldap_ip in config["ip"]:
 		ldap_server = Server(ldap_ip)
-		logging.debug(f"New LDAP connection is LDAP://{ldap_ip}@{domain}\\{user_username}")
+		logging.debug(f"Новое LDAP соединение: LDAP://{ldap_ip}@{domain}\\{user_username}")
 		ldap_conn = Connection(ldap_server, user= f"{domain}\\{user_username}", password = user_password)
 		# Проверка логина
 		if ldap_conn.bind():
-			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username} success")
+			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username} авторизация успешна")
 			# Выгрузка атрибутов с ldap сервера
 			ldap_conn.search(search_base=f'{dc_str}', search_filter=f"(sAMAccountName={user_username})", attributes = ["memberOf", "cn"])
 			dn_user = ldap_conn.response[0]['dn']
@@ -55,5 +55,5 @@ def ldap_logon(credentionals: dict[str]) -> dict:
 			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nUser Priv={group}")
 			return 1, group, user_username, fullname
 		else:
-			logging.debug(f"Incorrect credentionals for LDAP://{ldap_ip}@{domain}\\{user_username}")
-	return 0, None, user_username, None 
+			logging.debug(f"Неверные данные для LDAP://{ldap_ip}@{domain}\\{user_username}")
+	return 0, None, user_username, None
