@@ -68,6 +68,8 @@ storage = RedisStorage.from_url(db_redis + os.getenv("redis_FSM_db"))
 dp = Dispatcher(storage = storage)
 webapp = WebAppInfo(url=os.getenv("webapp_url"))
 
+class network(StatesGroup):
+	menu = State()
 
 class admin_plane(StatesGroup):
 	menu = State()
@@ -84,19 +86,23 @@ class send_report_states(StatesGroup):
 	verify_report = State()
 
 def menu_buttons_build(access_level: str, path: str):
-	back_button = InlineKeyboardButton(text = "Назад (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "back")
+	back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
 	match path:
 		case "back_only":
 			main_buttons_finish_list = [[back_button]]
 
 		case "main_menu":
+			# virtual_machine_meny_button
+
+			network_menu_button = InlineKeyboardButton(text = "Сети (В разработке)⚠️", callback_data = "network_menu")
+			
 			admin_plane_button = InlineKeyboardButton(text = "Панель администратора (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "admin_plane_menu")
 
-			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢 (НЕ РЕАЛИЗОВАНО)", callback_data = "report_menu")
+			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢", callback_data = "report_menu")
 			# notifications_center_button = InlineKeyboardButton(text = "Центр уведомлений (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "notifications_center_menu")
-			end_session_button = InlineKeyboardButton(text = "Завершить сессию🚪", callback_data = "session_end")
+			end_session_button = InlineKeyboardButton(text = "Завершить сессию 🚪", callback_data = "session_end")
 
-			main_buttons = [[report_button], [end_session_button]]
+			main_buttons = [[network_menu_button], [report_button], [end_session_button]]
 			if access_level == "Admin":
 				main_buttons_finish_list = [[admin_plane_button]] + main_buttons
 			else:
@@ -107,7 +113,7 @@ def menu_buttons_build(access_level: str, path: str):
 			change_picture_button = InlineKeyboardButton(text = "Изменить вложения", callback_data = "change_picture")
 			send_report_button = InlineKeyboardButton(text = "Отправить сообщение", callback_data = "send_report")
 
-			main_buttons_finish_list = [[change_text_button], [change_picture_button], [send_report_button]]
+			main_buttons_finish_list = [[change_text_button], [change_picture_button], [send_report_button], [back_button]]
 
 		case "admin_plane":
 			all_tickets_button = InlineKeyboardButton(text = "Все заявки", callback_data = "all_tickets_0")
@@ -122,27 +128,15 @@ def menu_buttons_build(access_level: str, path: str):
 			], [
 				back_button
 			]
+		
+		case "network_menu":
+			add_ip = InlineKeyboardButton(text = "Выделение IP адреса ➕ (В разработке)⚠️", callback_data = "add_ip")
+			clean_ip = InlineKeyboardButton(text = "Освобождение IP ➖ (В разработке)⚠️", callback_data = "clean_ip")
+			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
+			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
+			internet_access = InlineKeyboardButton(text = "Internet access 🌐 (В разработке)⚠️", callback_data = "internet_access")
 
-
-	
-	# if path == "main_menu":
-	# 	admin_plane_button = InlineKeyboardButton(text = "Панель администратора (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "admin_plane_menu")
-
-	# 	report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢", callback_data = "report_menu")
-	# 	notifications_center_button = InlineKeyboardButton(text = "Центр уведомлений (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "notifications_center_menu")
-	# 	end_session_button = InlineKeyboardButton(text = "Завершить сессию🚪", callback_data = "session_end")
-
-	# 	main_buttons = [[report_button], [notifications_center_button], [end_session_button]]
-	# 	if access_level == "Admin":
-	# 		main_buttons_finish_list = [[admin_plane_button]] + main_buttons
-	# 	else:
-	# 		main_buttons_finish_list = main_buttons
-	# elif path == "report_preview":
-	# 	change_text_button = InlineKeyboardButton(text = "Правка текста", callback_data = "report_menu")
-	# 	change_picture_button = InlineKeyboardButton(text = "Изменить вложения", callback_data = "change_picture")
-	# 	send_report_button = InlineKeyboardButton(text = "Отправить сообщение", callback_data = "send_report")
-
-	# 	main_buttons_finish_list = [[change_text_button], [change_picture_button], [send_report_button]]
+			main_buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [back_button]]
 	
 	return InlineKeyboardMarkup(inline_keyboard = main_buttons_finish_list)
 
@@ -225,7 +219,42 @@ async def state_clear(message: Message, state: FSMContext):
 	await message.reply(text=f"STATE cleared: {current_state}")
 
 
-@dp.callback_query(F.data == "admin_plane_menu")
+
+@dp.callback_query(F.data == "back")
+async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		current_state = await state.get_state()
+
+		match current_state:
+			case "network:menu" | "admin_plane:menu" | "send_report_states:verify_report":
+				await main_menu_cal(callback, state)
+
+			case "admin_plane:view_all_tickets":
+				await admin_plane_menu(callback, state)
+
+			case _:
+				await main_menu_cal(callback, state)
+
+
+
+@dp.callback_query(F.data == "network_menu", StateFilter(main_states.menu))
+async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.menu)
+
+		keyboard = menu_buttons_build(None, "network_menu")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = "Настройки сети 🌐", reply_markup = keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+
+@dp.callback_query(F.data == "admin_plane_menu", StateFilter(main_states.menu))
 async def admin_plane_menu(callback: CallbackQuery, state: FSMContext) -> None:
 	current_state = await state.get_state()
 	
@@ -238,6 +267,8 @@ async def admin_plane_menu(callback: CallbackQuery, state: FSMContext) -> None:
 
 		await bot.send_message(chat_id = callback.from_user.id, text = "Панель Администратора👑", reply_markup = keyboard)
 		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
 
 
 @dp.callback_query(F.data.startswith("all_tickets_"), StateFilter(admin_plane.menu, admin_plane.view_all_tickets))
