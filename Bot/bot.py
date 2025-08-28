@@ -58,6 +58,25 @@ psql_conn = psycopg2.connect(user = os.getenv("postsql_username"),
 psql_conn.set_session(autocommit=True)
 psql_cursor = psql_conn.cursor()
 
+psql_cursor.execute("""select * from information_schema.tables where table_name='Admins table';""")
+if bool(psql_cursor.rowcount):
+	print("Admins table - Exist")
+else:
+	psql_cursor.execute("""CREATE TABLE public."Admins table" (username character varying(24) NOT NULL, chat_id bigint NOT NULL);""")
+
+psql_cursor.execute("""select * from information_schema.tables where table_name='Reports table';""")
+if bool(psql_cursor.rowcount):
+	print("Reports table - Exist")
+else:
+	psql_cursor.execute("""CREATE TABLE public."Reports table" (text character varying(4096) NOT NULL,status character varying(6) NOT NULL, attachments_hashs text, chat_id bigint NOT NULL, username character varying(24) NOT NULL, "ID_rep" bigint NOT NULL DEFAULT nextval('"Reports table_ID_rep_seq"'::regclass), PRIMARY KEY ("ID_rep"));""")
+
+psql_cursor.execute("""select * from information_schema.tables where table_name='Requests table';""")
+if bool(psql_cursor.rowcount):
+	print("Requests table - Exist")
+else:
+	psql_cursor.execute("""CREATE TABLE public."Requests table" ("ID" bigint NOT NULL DEFAULT nextval('"Requests table_ID_seq"'::regclass), type character varying(6) NOT NULL, owner_ldap_fullname character varying(30), owner_chat_id integer NOT NULL, owner_username character varying(30) NOT NULL, PRIMARY KEY ("ID"));""")
+
+
 def psql_connect() -> str:
 	psql_cursor.execute("SELECT version();")
 	return psql_cursor.fetchone()

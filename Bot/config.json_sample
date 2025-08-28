@@ -1,0 +1,30 @@
+{
+	"logs": {
+		"file": "logs.txt", #main bot logfile
+		"level": "debug" #bot logging level
+	},
+	"databases": {
+		"redis": {
+			"port": 6379, #network port to connect redis database
+			"url": "127.0.0.1" #IP to connect redis database
+		},
+		"psql": {
+			"url": "127.0.0.1", #IP to connect redis database
+			"port": 5432 #network port to connect SQL database
+		}
+	},
+	"ldap": {
+		"ip": ["10.1.101.5", "10.1.101.6"], #ldap dc IPs
+		"user_group": "ISS_vmPB_user", #ldap users group name
+		"admin_group": "ISS_vmPB_admin" #ldap admins group name
+	},
+	"timerman": {
+		"logs": {
+			"file": "timerman_logs.txt", #timerman module logfile
+			"level": "debug" #timerman module logging level
+		},
+		"check_session_pause": 60, #interval check session (seconds)
+		"session_seconds_timeout": 3600, #session timeout (seconds)
+		"notification_delete_timer_sec": 15 #notification auto-delete timer (second)
+	}
+}
