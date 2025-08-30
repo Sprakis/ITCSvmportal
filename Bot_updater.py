@@ -9,12 +9,9 @@ def main() -> None:
 	reset_env_flag = False
 	branch = "main"
 	
-	a = 1
-	
-	while a == 1:
+	while True:
 		
 		
-		a = 0
 		if platform.system() == "Windows":
 			os.system('cls')
 		else:
