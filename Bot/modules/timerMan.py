@@ -1,5 +1,4 @@
 import asyncio
-import sched
 import json
 import redis
 import logging

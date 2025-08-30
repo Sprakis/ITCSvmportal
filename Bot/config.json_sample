@@ -1,7 +1,7 @@
 {
 	"logs": {
 		"file": "logs.txt", #main bot logfile
-		"level": "debug" #bot logging level
+		"level": "debug" #bot logging level [debug,info,warning,error,crititcal]
 	},
 	"databases": {
 		"redis": {

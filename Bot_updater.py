@@ -1,8 +1,8 @@
+import sys
 import os
 import platform
 import docker
 import json
-import psycopg2
 
 def main() -> None:
 	reset_conf_flag = False
@@ -11,7 +11,7 @@ def main() -> None:
 	
 	a = 1
 	
-	while True:
+	while a == 1:
 		
 		
 		a = 0
@@ -24,7 +24,7 @@ def main() -> None:
 Optinons:\nStream: \033[1m{'\033[92m' if branch == "main" else '\033[93m'}{branch}\033[0m
 Reset config.json: \033[1m{'\033[91m' if reset_conf_flag else '\033[92m'}{reset_conf_flag}\033[0m
 Reset .env: \033[1m{'\033[91m' if reset_env_flag else '\033[92m'}{reset_env_flag}\033[0m
-Choose option:\n1) First phase - Download and unpacked Bot from reposetory\n2) Second phase - Build docker container and upgrade or install bot\n3) Switch reset config flag\n4) Switch reset env flag\n5) Branch select\n6) Exit\n\n\n
+Choose option:\n1) First phase - Download and unpacked Bot from reposetory\n2) Second phase - Build docker container and upgrade or install bot\n3) Switch reset config flag\n4) Switch reset env flag\n5) Branch select\n6) Delete backups containers\n7) Exit\n\n\n
 Optinon: """)
 
 		match int(key):
@@ -38,22 +38,23 @@ Optinon: """)
 				if reset_conf_flag:
 					os.system("mv ./Bot/config.json_sample ./Bot/config.json")
 					
-					docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
+					if 'docker' in sys.modules:
+						docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
 					
-					for network in docker_client.networks.list():
-						if network.name == "bridge":
-							network_id = network.id
-					network = docker_client.networks.get(network_id = network_id)
-					host_ip = network.attrs["IPAM"]["Config"][0]["Gateway"]
+						for network in docker_client.networks.list():
+							if network.name == "bridge":
+								network_id = network.id
+						network = docker_client.networks.get(network_id = network_id)
+						host_ip = network.attrs["IPAM"]["Config"][0]["Gateway"]
 
-					with open("./Bot/config.json", 'r') as config_file:
-						config = json.load(config_file)
+						with open("./Bot/config.json", 'r') as config_file:
+							config = json.load(config_file)
 				
-					config["databases"]["redis"]["url"] = host_ip
-					config["databases"]["psql"]["url"] = host_ip
+						config["databases"]["redis"]["url"] = host_ip
+						config["databases"]["psql"]["url"] = host_ip
 
-					with open("./Bot/config.json", 'w') as config_file:
-						json.dump(config, config_file, indent=4)
+						with open("./Bot/config.json", 'w') as config_file:
+							json.dump(config, config_file, indent=4)
 
 				if reset_env_flag:
 					os.system("mv ./Bot/.env_sample ./Bot/.env")
@@ -61,8 +62,31 @@ Optinon: """)
 			case 2:
 				
 				os.chdir("./Bot")
+				
+				print("Build timerman module")
+				os.system("docker build -t itcs_vmp_timerman -f ./modules/Dockerfile_timerman .")
+
+				print("Build main bot")
 				os.system("docker build -t itcs_vm_portal .")
-				os.system("docker run -it -d --env-file .env -v ./:/bot/ --restart=unless-stopped --name itcs_vm_portal_bot itcs_vm_portal")
+
+				if 'docker' in sys.modules:
+					docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
+
+					print("Backups containers")
+
+					for container in docker_client.containers.list(all = True):
+						if container.name == "itcs_vm_portal_bot":
+							container.stop()
+							container.rename(name = "itcs_vm_portal_bot_backup")
+						if container.name == "itcs_vmp_timerman":
+							container.stop()
+							container.rename(name = "itcs_vmp_timerman_backup")
+
+				print("Start timerman module")
+				os.system("docker run -it -d --env-file .env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vmpb_timerman itcs_vmp_timerman")
+					
+				os.system("docker run -it -d --env-file .env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_bot itcs_vm_portal")
+
 
 			case 3:
 				if reset_conf_flag:
@@ -77,7 +101,18 @@ Optinon: """)
 			
 			case 5:
 				branch = input("Please input branch name: ")
+			
 			case 6:
+				print("Delete backups")
+				if 'docker' in sys.modules:
+					docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
+					for container in docker_client.containers.list(all = True):
+						if container.name == "itcs_vmp_timerman_backup":
+							container.remove(v = True)
+						if container.name == "itcs_vm_portal_bot_backup":
+							container.remove(v = True) 
+
+			case 7:
 				return 0
 
 
