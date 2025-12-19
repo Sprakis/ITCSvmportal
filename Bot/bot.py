@@ -95,6 +95,9 @@ webapp = WebAppInfo(url=os.getenv("webapp_url"))
 
 class network(StatesGroup):
 	menu = State()
+	status_ip = State()
+	status_ip_ip = State()
+	status_ip_vm = State()
 
 class admin_plane(StatesGroup):
 	menu = State()
@@ -110,11 +113,12 @@ class send_report_states(StatesGroup):
 	media_del = State()
 	verify_report = State()
 
+# Service functions
 def menu_buttons_build(access_level: str, path: str):
 	back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
 	match path:
 		case "back_only":
-			main_buttons_finish_list = [[back_button]]
+			buttons_finish_list = [[back_button]]
 
 		case "main_menu":
 			# virtual_machine_meny_button
@@ -129,23 +133,23 @@ def menu_buttons_build(access_level: str, path: str):
 
 			main_buttons = [[network_menu_button], [report_button], [end_session_button]]
 			if access_level == "Admin":
-				main_buttons_finish_list = [[admin_plane_button]] + main_buttons
+				buttons_finish_list = [[admin_plane_button]] + main_buttons
 			else:
-				main_buttons_finish_list = main_buttons
+				buttons_finish_list = main_buttons
 		
 		case "report_preview":
 			change_text_button = InlineKeyboardButton(text = "Правка текста", callback_data = "report_menu")
 			change_picture_button = InlineKeyboardButton(text = "Изменить вложения", callback_data = "change_picture")
 			send_report_button = InlineKeyboardButton(text = "Отправить сообщение", callback_data = "send_report")
 
-			main_buttons_finish_list = [[change_text_button], [change_picture_button], [send_report_button], [back_button]]
+			buttons_finish_list = [[change_text_button], [change_picture_button], [send_report_button], [back_button]]
 
 		case "admin_plane":
 			all_tickets_button = InlineKeyboardButton(text = "Все заявки", callback_data = "all_tickets_0")
-			main_buttons_finish_list = [[all_tickets_button], [back_button]]
+			buttons_finish_list = [[all_tickets_button], [back_button]]
 
 		case "all_tickets":
-			main_buttons_finish_list = [
+			buttons_finish_list = [
 				InlineKeyboardButton(text = "<<", callback_data = "all_tickets_slide-left"),
 				InlineKeyboardButton(text = ">>", callback_data = "all_tickets_slide-right")
 			], [
@@ -159,11 +163,18 @@ def menu_buttons_build(access_level: str, path: str):
 			clean_ip = InlineKeyboardButton(text = "Освобождение IP ➖ (В разработке)⚠️", callback_data = "clean_ip")
 			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
 			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
-			internet_access = InlineKeyboardButton(text = "Internet access 🌐 (В разработке)⚠️", callback_data = "internet_access")
+			internet_access = InlineKeyboardButton(text = "Доступ в интернет 🌐 (В разработке)⚠️", callback_data = "internet_access")
+			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔", callback_data="status_ip")
 
-			main_buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [back_button]]
+			buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
+
+		case "network_menu_status":
+			info_by_ip = InlineKeyboardButton(text = "Информация по IP 🌐", callback_data="status_ip_ip")
+			info_by_vm = InlineKeyboardButton(text = "Информация о виртуальной машине 💻", callback_data="status_ip_vm")
+
+			buttons_finish_list = [[info_by_ip], [info_by_vm], [back_button]]
 	
-	return InlineKeyboardMarkup(inline_keyboard = main_buttons_finish_list)
+	return InlineKeyboardMarkup(inline_keyboard = buttons_finish_list)
 
 async def clean_message(chat_id: int, message_id: int, count: int) -> None:
 	for i in range(count):
@@ -178,28 +189,6 @@ async def end_session_notify(message: Message, state: FSMContext) -> None:
 
 	await state.clear()
 	await message.answer(f"Привет-привет *{message.chat.username}* пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
-
-
-
-@dp.message(CommandStart())
-async def command_start_handler(message: Message, state: FSMContext) -> None:
-	await bot.send_message(chat_id = message.chat.id, text = f"Это *ITCS* _VM portal_ ~bot~", parse_mode = 'Markdown')
-	await clean_message(message.chat.id, message.message_id, 3)
-
-	current_state = await state.get_state()
-
-	if current_state and check_session(session_db_redis, message.chat.username):
-		await state.set_state(main_states.menu)
-		update_session(session_db_redis, message.chat.username)
-		await bot.send_message(chat_id = message.chat.id, text = f"Меню доступно через команду /menu или через контекстное меню бота", parse_mode = 'Markdown')
-	else:
-		login_button = [KeyboardButton(text = f"Авторизироваться как {message.chat.username}", web_app = webapp)]
-		login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
-
-		await state.clear()
-		await message.answer(f"Привет-привет, *{message.chat.username}*! Пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
-
-
 
 @dp.message(F.content_type == ContentType.WEB_APP_DATA)
 async def web_app_logon(message: Message, state: FSMContext) -> None:
@@ -230,6 +219,55 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 	
 	await clean_message(message.chat.id, message.message_id, 3)
 
+@dp.callback_query(F.data == "delete_notification")
+async def delete_notification(callback: CallbackQuery) -> None:
+	await clean_message(callback.from_user.id, callback.message.message_id, 1)
+
+def update_admins_table(access_level, tg_username, chat_id) -> None:
+	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table" WHERE chat_id = '{chat_id}'""")
+	if psql_cursor.fetchone():
+		logging.debug(f"Пользователь {tg_username}:{chat_id} найден среди администраторов")
+		if access_level == "User":
+			psql_cursor.execute(f"""DELETE FROM "Admins table" WHERE chat_id = '{chat_id}'""")
+			logging.debug(f"Пользователь {tg_username}:{chat_id} удален из списка администраторов")
+	else:
+		if access_level == "Admin":
+			psql_cursor.execute(f"""INSERT INTO "Admins table" (username, chat_id) VALUES ('{tg_username}','{chat_id}')""")
+			logging.debug(f"Пользователь {tg_username}:{chat_id} добавлен в список администраторов")
+
+async def admin_notification(type_message: str, work_id: int) -> None:
+	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table";""")
+	admin_raw_list = psql_cursor.fetchall()
+	admin_list = [item[0] for item in admin_raw_list]
+	if type_message == "ticket":
+
+		delete_notification_button = [[InlineKeyboardButton(text = "Удалить уведомление", callback_data = "delete_notification")]]
+		delete_keyboard = InlineKeyboardMarkup(inline_keyboard = delete_notification_button)
+
+		for admin_chat_id in admin_list:
+			msg = await bot.send_message(chat_id = admin_chat_id, text = f"Создано новое обращение по пробеме: {work_id}", reply_markup = delete_keyboard)
+			tmp_db_redis.lpush("notifications", f"[{msg.chat.id}, {msg.message_id}, {str(datetime.datetime.now())}]")
+
+
+# Main commands
+@dp.message(CommandStart())
+async def command_start_handler(message: Message, state: FSMContext) -> None:
+	await bot.send_message(chat_id = message.chat.id, text = f"Это *ITCS* _VM portal_ ~bot~", parse_mode = 'Markdown')
+	await clean_message(message.chat.id, message.message_id, 3)
+
+	current_state = await state.get_state()
+
+	if current_state and check_session(session_db_redis, message.chat.username):
+		await state.set_state(main_states.menu)
+		update_session(session_db_redis, message.chat.username)
+		await bot.send_message(chat_id = message.chat.id, text = f"Меню доступно через команду /menu или через контекстное меню бота", parse_mode = 'Markdown')
+	else:
+		login_button = [KeyboardButton(text = f"Авторизироваться как {message.chat.username}", web_app = webapp)]
+		login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
+
+		await state.clear()
+		await message.answer(f"Привет-привет, *{message.chat.username}*! Пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
+
 
 # Temp command for state check
 @dp.message(Command(commands=["state"]))
@@ -244,7 +282,7 @@ async def state_clear(message: Message, state: FSMContext):
 	await message.reply(text=f"STATE cleared: {current_state}")
 
 
-
+# Main functions
 @dp.callback_query(F.data == "back")
 async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
 	if check_session(session_db_redis, callback.from_user.username):
@@ -259,11 +297,16 @@ async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
 			case "admin_plane:view_all_tickets":
 				await admin_plane_menu(callback, state)
 
+			case "network:status_ip":
+				await network_menu(callback, state)
+
+			case "network:status_ip_ip" | "network:status_ip_vm":
+				await status_ip(callback, state)
+
 			case _:
 				await main_menu_cal(callback, state)
 
-
-
+# Network menu
 @dp.callback_query(F.data == "network_menu", StateFilter(main_states.menu))
 async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 	if check_session(session_db_redis, callback.from_user.username):
@@ -279,6 +322,69 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 		await end_session_notify(callback, state)
 
 
+@dp.callback_query(F.data == "status_ip", StateFilter(network.menu))
+async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.status_ip)
+
+		keyboard = menu_buttons_build(None, "network_menu_status")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = "Что узнаем? 🤔", reply_markup=keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "status_ip_ip", StateFilter(network.status_ip))
+async def status_ip_ip(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.status_ip_ip)
+
+		keyboard = menu_buttons_build(None, "back_only")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = "Введите IP-адрес", reply_markup=keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "status_ip_vm", StateFilter(network.status_ip))
+async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.status_ip_vm)
+
+		keyboard = menu_buttons_build(None, "back_only")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = "Введите полное название виртуальной машины", reply_markup=keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.message(F.content_type.in_({'text'}), StateFilter(network.status_ip_ip, network.status_ip_vm))
+async def status_ip_resp(message: Message, state: FSMContext) -> None:
+	if check_session(session_db_redis, message.chat.username):
+		update_session(session_db_redis, message.chat.username)
+		
+		current_state = await state.get_state()
+		await state.set_state(network.status_ip)
+		
+		if current_state == "network:status_ip_ip":
+			text = "IP: "
+		else:
+			text = "VM: "
+
+		keyboard = menu_buttons_build(None, "network_menu_status")
+
+		await bot.send_message(chat_id = message.chat.id, text = text + message.text, reply_markup = keyboard)
+		await clean_message(message.chat.id, message.message_id, 2)
+	else:
+		await end_session_notify(message, state)
+
+# Admin menu
 @dp.callback_query(F.data == "admin_plane_menu", StateFilter(main_states.menu))
 async def admin_plane_menu(callback: CallbackQuery, state: FSMContext) -> None:
 	current_state = await state.get_state()
@@ -335,7 +441,7 @@ async def all_tickets(callback: CallbackQuery, state: FSMContext):
 		state_ticket_number = await state.get_data()
 		print(state_ticket_number["ticket_number"])
 
-
+# Main menu
 @dp.message(Command(commands=["menu"]))
 async def main_menu(message: Message, state: FSMContext) -> None:
 		
@@ -352,38 +458,7 @@ async def main_menu(message: Message, state: FSMContext) -> None:
 	await clean_message(message.chat.id, message.message_id, 3)
 
 
-def update_admins_table(access_level, tg_username, chat_id) -> None:
-	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table" WHERE chat_id = '{chat_id}'""")
-	if psql_cursor.fetchone():
-		logging.debug(f"Пользователь {tg_username}:{chat_id} найден среди администраторов")
-		if access_level == "User":
-			psql_cursor.execute(f"""DELETE FROM "Admins table" WHERE chat_id = '{chat_id}'""")
-			logging.debug(f"Пользователь {tg_username}:{chat_id} удален из списка администраторов")
-	else:
-		if access_level == "Admin":
-			psql_cursor.execute(f"""INSERT INTO "Admins table" (username, chat_id) VALUES ('{tg_username}','{chat_id}')""")
-			logging.debug(f"Пользователь {tg_username}:{chat_id} добавлен в список администраторов")
-
-
-async def admin_notification(type_message: str, work_id: int) -> None:
-	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table";""")
-	admin_raw_list = psql_cursor.fetchall()
-	admin_list = [item[0] for item in admin_raw_list]
-	if type_message == "ticket":
-
-		delete_notification_button = [[InlineKeyboardButton(text = "Удалить уведомление", callback_data = "delete_notification")]]
-		delete_keyboard = InlineKeyboardMarkup(inline_keyboard = delete_notification_button)
-
-		for admin_chat_id in admin_list:
-			msg = await bot.send_message(chat_id = admin_chat_id, text = f"Создано новое обращение по пробеме: {work_id}", reply_markup = delete_keyboard)
-			tmp_db_redis.lpush("notifications", f"[{msg.chat.id}, {msg.message_id}, {str(datetime.datetime.now())}]")
-		
-
-@dp.callback_query(F.data == "delete_notification")
-async def delete_notification(callback: CallbackQuery) -> None:
-	await clean_message(callback.from_user.id, callback.message.message_id, 1)
-
-
+# Report menu
 async def send_report(state_data: dict, user_data: dict) -> None:
 	data_hash = {}
 	if state_data.get("video_id_list"):

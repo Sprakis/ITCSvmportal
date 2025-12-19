@@ -21,11 +21,11 @@ def main() -> None:
 		print(f"Status: {msg}")
 
 		key = input(f"""ITCS VM Portal Bot updater\n
-Optinons:\nStream: \033[1m{'\033[92m' if branch == "main" else '\033[93m'}{branch}\033[0m
+Options:\nStream: \033[1m{'\033[92m' if branch == "main" else '\033[93m'}{branch}\033[0m
 Reset config.json: \033[1m{'\033[91m' if reset_conf_flag else '\033[92m'}{reset_conf_flag}\033[0m
 Reset .env: \033[1m{'\033[91m' if reset_env_flag else '\033[92m'}{reset_env_flag}\033[0m
 Choose option:\n1) First phase - Download and unpacked Bot from repository\n2) Second phase - Build docker container and upgrade or install bot\n3) Switch reset config flag\n4) Switch reset env flag\n5) Branch select\n6) Delete backups containers\n7) Exit\n\n\n
-Optinon: """)
+Option: """)
 
 		match int(key):
 			case 1:
