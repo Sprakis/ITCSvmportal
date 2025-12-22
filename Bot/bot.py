@@ -172,7 +172,7 @@ def menu_buttons_build(access_level: str, path: str):
 
 		case "network_menu_status":
 			info_by_ip = InlineKeyboardButton(text = "Информация по IP 🌐", callback_data="status_ip_ip")
-			info_by_vm = InlineKeyboardButton(text = "Информация о виртуальной машине 💻", callback_data="status_ip_vm")
+			info_by_vm = InlineKeyboardButton(text = "Информация об оборудовании или виртуальной машине 💻 (В разработке)⚠️", callback_data="status_ip_vm")
 
 			buttons_finish_list = [[info_by_ip], [info_by_vm], [back_button]]
 	
@@ -378,13 +378,13 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 			net_data = get_ip_info(message.text)
 			if net_data:
 				net_status = await get_ip_net_info(message.text)
-				msg = f"IP: {net_data["address"]}\n\nРоль: {net_data["role"]}\nСтатус: {net_data["status"]}\nТип системы: {net_data["custom_fields"]["Implementation_type"]}:{net_data["custom_fields"]["Machine_Name"]}\nВладелец: {net_data["tenant"]["name"]}\nДоступ в Интернет: {net_status}"
+				msg = f"IP: {net_data["address"]}\n\nРоль: {net_data["role"]}\nСтатус: {net_data["status"]}\nТип системы: {net_data["custom_fields"]["Implementation_type"]}:{net_data["custom_fields"]["Machine_Name"]}\nВладелец: {net_data["tenant"]["name"]}\nДоступ в Интернет: {'✅' if net_status else '❌'}"
 			else:
 				msg = f"IP: {message.text}\n\nСтатус: Available"
 		else:
 			vm_data = get_vm_info(message.text)
-
-			text = "VM: "
+			
+			text = f"VM: {vm_data}"
 			msg = text
 
 		keyboard = menu_buttons_build(None, "network_menu_status")

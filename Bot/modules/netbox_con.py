@@ -3,6 +3,7 @@ import urllib3
 urllib3.disable_warnings()
 import os
 import json
+import logging
 
 
 def bot_config_read() -> dict:
@@ -17,17 +18,27 @@ def get_ip_info(ip: str) -> dict:
 			"Authorization": f"Token {os.getenv("netbox_api_key")}"}
 	body = {
 		"query": f"""
-query{{
-		ip_address_list(address: "{ip}") {{
-		  address, role, status, custom_fields, tenant {{
-		  name
-		  }}
-		}}
-}}
-"""
+		query{{
+			ip_address_list(filters: {{
+				address: {{
+					starts_with: "{ip}"
+				}}
+			}})
+			{{
+				address,
+				role,
+				status,
+				custom_fields,
+				tenant {{
+					name
+				}}
+			}}
+		}}"""
 	}
 	config = bot_config_read()["netbox"]
-	response = requests.get(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	logging.debug(f"Запрос в Netbox: https://{config["address"]}/graphql/\nHeaders: {headers}\nPayload: {body}")
+	response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	logging.debug(f"Успешный запрос! Код: {response.status_code} | Ответ: {response.text}")
 	try:
 		return response.json()["data"]["ip_address_list"][0]
 	except:
@@ -40,13 +51,13 @@ def get_vm_info(vm: str) -> dict:
 		"Authorization": f"Token {os.getenv("netbox_api_key")}"
 	}
 	body = {
-		"query": f"""
-query{{
-		ip_address_list(address: "{ip}") {{
-		  address, role, status, custom_fields, tenant {{
-		  name
-		  }}
-		}}
-}}
-"""
+		"query": f""""""
 	}
+	config = bot_config_read()["netbox"]
+	logging.debug(f"Запрос в Netbox: https://{config["address"]}/graphql/\nHeaders: {headers}\nPayload: {body}")
+	response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	logging.debug(f"Успешный запрос! Код: {response.status_code} | Ответ: {response.text}")
+	try:
+		return response.json()["data"]["ip_address_list"]
+	except:
+		return None
