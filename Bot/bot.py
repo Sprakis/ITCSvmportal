@@ -24,6 +24,8 @@ work_dir = os.path.abspath(os.getcwd())
 sys.path.append("modules")
 from ldap_auth import ldap_logon
 from session_controller import new_session, update_session, exit_session, load_user_data, check_session
+from netbox_con import get_ip_info, get_vm_info
+from paloalto_con import get_ip_net_info
 
 # hawk = Hawk(os.getenv("HAWK_key"))
 
@@ -373,13 +375,21 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		await state.set_state(network.status_ip)
 		
 		if current_state == "network:status_ip_ip":
-			text = "IP: "
+			net_data = get_ip_info(message.text)
+			if net_data:
+				net_status = await get_ip_net_info(message.text)
+				msg = f"IP: {net_data["address"]}\n\nРоль: {net_data["role"]}\nСтатус: {net_data["status"]}\nТип системы: {net_data["custom_fields"]["Implementation_type"]}:{net_data["custom_fields"]["Machine_Name"]}\nВладелец: {net_data["tenant"]["name"]}\nДоступ в Интернет: {net_status}"
+			else:
+				msg = f"IP: {message.text}\n\nСтатус: Available"
 		else:
+			vm_data = get_vm_info(message.text)
+
 			text = "VM: "
+			msg = text
 
 		keyboard = menu_buttons_build(None, "network_menu_status")
 
-		await bot.send_message(chat_id = message.chat.id, text = text + message.text, reply_markup = keyboard)
+		await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
 		await clean_message(message.chat.id, message.message_id, 2)
 	else:
 		await end_session_notify(message, state)
@@ -553,7 +563,9 @@ async def text_report(callback: CallbackQuery, state: FSMContext) -> None:
 
 		logging.debug(f"Пользователь {callback.from_user.username} перешел в report_menu. State={await state.get_state()}. State_data={state_data}")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = (f"Пожалуйста опишите свою проблему\nВаше предыдущее сообщение:\n_{state_data["text"]}_" if state_data_text else "Пожалуйста опишите свою проблему"), parse_mode = 'Markdown', reply_markup = ReplyKeyboardRemove())
+		keyboard = menu_buttons_build(None, "back_only")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = (f"Пожалуйста опишите свою проблему\nВаше предыдущее сообщение:\n_{state_data["text"]}_" if state_data_text else "Пожалуйста опишите свою проблему"), parse_mode = 'Markdown', reply_markup = keyboard)
 		await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
