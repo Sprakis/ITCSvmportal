@@ -125,7 +125,7 @@ def menu_buttons_build(access_level: str, path: str):
 		case "main_menu":
 			# virtual_machine_meny_button
 
-			network_menu_button = InlineKeyboardButton(text = "Сети (В разработке)⚠️", callback_data = "network_menu")
+			network_menu_button = InlineKeyboardButton(text = "Сети 🌐", callback_data = "network_menu")
 			
 			admin_plane_button = InlineKeyboardButton(text = "Панель администратора (НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "admin_plane_menu")
 
@@ -168,8 +168,8 @@ def menu_buttons_build(access_level: str, path: str):
 			internet_access = InlineKeyboardButton(text = "Доступ в интернет 🌐 (В разработке)⚠️", callback_data = "internet_access")
 			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔", callback_data="status_ip")
 
-			buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
-
+			# buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
+			buttons_finish_list = [[status_ip], [back_button]]
 		case "network_menu_status":
 			info_by_ip = InlineKeyboardButton(text = "Информация по IP 🌐", callback_data="status_ip_ip")
 			info_by_vm = InlineKeyboardButton(text = "Информация об оборудовании или виртуальной машине 💻 (В разработке)⚠️", callback_data="status_ip_vm")
@@ -374,22 +374,57 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		current_state = await state.get_state()
 		await state.set_state(network.status_ip)
 		
+		keyboard = menu_buttons_build(None, "network_menu_status")
+
+		await bot.send_chat_action(chat_id = message.chat.id, action = "typing")
+
 		if current_state == "network:status_ip_ip":
 			net_data = get_ip_info(message.text)
 			if net_data:
-				net_status = await get_ip_net_info(message.text)
-				msg = f"IP: {net_data["address"]}\n\nРоль: {net_data["role"]}\nСтатус: {net_data["status"]}\nТип системы: {net_data["custom_fields"]["Implementation_type"]}:{net_data["custom_fields"]["Machine_Name"]}\nВладелец: {net_data["tenant"]["name"]}\nДоступ в Интернет: {'✅' if net_status else '❌'}"
+				net_status = await get_ip_net_info([message.text])
+				msg = f"""IP: {net_data["address"]}\n
+Роль: {net_data["role"]}
+Статус: {net_data["status"]}
+Тип системы: {net_data["custom_fields"]["Implementation_type"]}"""
+				temp = net_data["custom_fields"]["Machine_Name"].split(" | ")
+				for vm_count in range(len(temp)):
+					msg += f"\n{net_data["custom_fields"]["Implementation_type"]} {vm_count + 1}: {temp[vm_count]}"
+				msg += f"\nВладелец: {net_data["tenant"]["name"]}\nДоступ в интернет: {'✅' if net_status[0] else '❌'}"
 			else:
 				msg = f"IP: {message.text}\n\nСтатус: Available"
+
+			await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
 		else:
 			vm_data = get_vm_info(message.text)
-			
-			text = f"VM: {vm_data}"
-			msg = text
+			if len(vm_data) == 0:
+				msg = "Информация о виртуальной машине не найдена"
+				await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+			else:
+				msg = ""
 
-		keyboard = menu_buttons_build(None, "network_menu_status")
+				for vm_name in vm_data:
+					msg += f'\n{vm_name["Machine_Name"]}\n'
+					ip_inet_matrix = []
+					for ip in vm_name["networks"]:
+						ip_inet_matrix.append(ip["address"].split("/")[0])
+					ip_inet_matrix = await get_ip_net_info(ip_inet_matrix)
+					for ip in vm_name["networks"]:
+						msg += f"""---------------
+IP: {ip["address"]}
+Тип: {ip["Implementation_type"]}
+Роль: {ip["role"]}
+Статус: {ip["status"]}
+Владелец: {ip["tenant"]}
+"""
+						for vm_cluster_count in range(len(ip["Machine_Name"])):
+							msg += f"Нода {vm_cluster_count + 1}: {ip["Machine_Name"][vm_cluster_count]}\n"
+						msg += f"Доступ в интернет: {'✅' if ip_inet_matrix[vm_name["networks"].index(ip)] else '❌'}\n"
+				if len(msg) > 4096:
+					for x in range(0, len(msg), 4096):
+						await bot.send_message(chat_id = message.chat.id, text = msg[x:x + 4096], reply_markup = keyboard)
+				else:
+					await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
 
-		await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
 		await clean_message(message.chat.id, message.message_id, 2)
 	else:
 		await end_session_notify(message, state)

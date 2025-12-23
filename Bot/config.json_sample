@@ -18,6 +18,16 @@
 		"user_group": "ISS_vmPB_user", #ldap users group name
 		"admin_group": "ISS_vmPB_admin" #ldap admins group name
 	},
+	"netbox": {
+		"address": "netbox.sample.local" #netbox url
+	},
+	"paloalto": {
+		"ip": "192.168.1.1", #mgmt ip palo alto
+		"internet_group": "internet_access", #Name for ip address group with internet access
+		"location_type": "vsys", #virtual system type
+		"location_name": "vsys1", #virtyal system name
+		"api_version": "v11.1" #API version
+	},
 	"timerman": {
 		"logs": {
 			"file": "timerman_logs.txt", #timerman module logfile
