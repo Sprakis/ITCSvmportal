@@ -375,18 +375,21 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		
 		keyboard = menu_buttons_build(None, "network_menu_status")
 
-		await bot.send_chat_action(chat_id = message.chat.id, action = "typing")
+		# await bot.send_chat_action(chat_id = message.chat.id, action = "typing")
+		status_msg = await bot.send_message(chat_id = message.chat.id, text = "_Запрос в базу данных_", parse_mode='markdown')
 
 		if current_state == "network:status_ip_ip":
 			net_data = get_ip_info(message.text)
 			if net_data:
-				print(net_data)
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._",parse_mode='markdown')
 				net_status = await get_ip_net_info([message.text])
 				msg = f"""IP: {net_data["address"]}\n
 Роль: {net_data["role"]}
 Статус: {net_data["status"]}
 Тип системы: {net_data["custom_fields"]["Implementation_type"]}"""
 				
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
+
 				if net_data["custom_fields"]["Machine_Name"]:
 					temp = net_data["custom_fields"]["Machine_Name"].split(" | ")
 					for vm_count in range(len(temp)):
@@ -401,14 +404,26 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 				msg = f"IP: {message.text}\n\nСтатус: Available"
 
 			await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+			try:
+				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+			except:
+				pass
 		else:
 			vm_data = get_vm_info(message.text)
 			if len(vm_data) == 0:
 				msg = "Информация о виртуальной машине не найдена"
 				await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+
+				try:
+					await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+				except:
+					pass
+
 			else:
 				msg = ""
-
+				
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._",parse_mode='markdown')
+				
 				for vm_name in vm_data:
 					msg += f'\n{vm_name["Machine_Name"]}\n'
 					ip_inet_matrix = []
@@ -426,11 +441,19 @@ IP: {ip["address"]}
 						for vm_cluster_count in range(len(ip["Machine_Name"])):
 							msg += f"Нода {vm_cluster_count + 1}: {ip["Machine_Name"][vm_cluster_count]}\n"
 						msg += f"Доступ в интернет: {'✅' if ip_inet_matrix[vm_name["networks"].index(ip)] else '❌'}\n"
+				
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
+
 				if len(msg) > 4096:
 					for x in range(0, len(msg), 4096):
 						await bot.send_message(chat_id = message.chat.id, text = msg[x:x + 4096], reply_markup = keyboard)
 				else:
 					await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+
+				try:
+					await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+				except:
+					pass
 
 		await clean_message(message.chat.id, message.message_id, 2)
 	else:
