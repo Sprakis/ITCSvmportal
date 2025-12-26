@@ -376,7 +376,7 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		keyboard = menu_buttons_build(None, "network_menu_status")
 
 		# await bot.send_chat_action(chat_id = message.chat.id, action = "typing")
-		status_msg = await bot.send_message(chat_id = message.chat.id, text = "_Запрос в базу данных_", parse_mode='markdown')
+		status_msg = await bot.send_message(chat_id = message.chat.id, text = "_Запрос в базу данных..._", parse_mode='markdown')
 
 		if current_state == "network:status_ip_ip":
 			net_data = get_ip_info(message.text)
