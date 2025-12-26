@@ -21,7 +21,7 @@ def get_ip_info(ip: str) -> dict:
 		query{{
 			ip_address_list(filters: {{
 				address: {{
-					starts_with: "{ip}"
+					regex: "{ip}/"
 				}}
 			}})
 			{{
@@ -31,7 +31,8 @@ def get_ip_info(ip: str) -> dict:
 				custom_fields,
 				tenant {{
 					name
-				}}
+				}},
+				description
 			}}
 		}}"""
 	}
@@ -57,7 +58,7 @@ def get_vm_info(vm: str) -> dict:
       path: "Machine_Name",
       lookup: {{
         string_lookup: {{
-          starts_with: "{vm}"
+          i_contains: "{vm}"
         }}
       }}
     }}

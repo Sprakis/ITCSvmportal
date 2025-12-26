@@ -323,7 +323,6 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 	else:
 		await end_session_notify(callback, state)
 
-
 @dp.callback_query(F.data == "status_ip", StateFilter(network.menu))
 async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
 	if check_session(session_db_redis, callback.from_user.username):
@@ -361,7 +360,7 @@ async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build(None, "back_only")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Введите полное название виртуальной машины", reply_markup=keyboard)
+		await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины или его часть", reply_markup=keyboard)
 		await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
@@ -381,15 +380,23 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		if current_state == "network:status_ip_ip":
 			net_data = get_ip_info(message.text)
 			if net_data:
+				print(net_data)
 				net_status = await get_ip_net_info([message.text])
 				msg = f"""IP: {net_data["address"]}\n
 Роль: {net_data["role"]}
 Статус: {net_data["status"]}
 Тип системы: {net_data["custom_fields"]["Implementation_type"]}"""
-				temp = net_data["custom_fields"]["Machine_Name"].split(" | ")
-				for vm_count in range(len(temp)):
-					msg += f"\n{net_data["custom_fields"]["Implementation_type"]} {vm_count + 1}: {temp[vm_count]}"
-				msg += f"\nВладелец: {net_data["tenant"]["name"]}\nДоступ в интернет: {'✅' if net_status[0] else '❌'}"
+				
+				if net_data["custom_fields"]["Machine_Name"]:
+					temp = net_data["custom_fields"]["Machine_Name"].split(" | ")
+					for vm_count in range(len(temp)):
+						msg += f"\n{net_data["custom_fields"]["Implementation_type"]} {vm_count + 1}: {temp[vm_count]}"
+					msg += f"\nВладелец: {net_data["tenant"]["name"]}\nДоступ в интернет: {'✅' if net_status[0] else '❌'}"
+				elif len(net_data["description"]) != 0:
+					msg += f"\n{net_data["custom_fields"]["Implementation_type"]}: {net_data["description"]}"
+				else:
+					msg += f"\n{net_data["custom_fields"]["Implementation_type"]}: IP не привязан, либо зарезервирован 😥"
+
 			else:
 				msg = f"IP: {message.text}\n\nСтатус: Available"
 
