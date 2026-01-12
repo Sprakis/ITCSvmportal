@@ -97,6 +97,10 @@ webapp = WebAppInfo(url=os.getenv("webapp_url"))
 
 class network(StatesGroup):
 	menu = State()
+	internet_access = State()
+	internet_access_ip = State()
+	internet_access_vm = State()
+	internet_resp = State()
 	status_ip = State()
 	status_ip_ip = State()
 	status_ip_vm = State()
@@ -165,11 +169,18 @@ def menu_buttons_build(access_level: str, path: str):
 			clean_ip = InlineKeyboardButton(text = "Освобождение IP ➖ (В разработке)⚠️", callback_data = "clean_ip")
 			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
 			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
-			internet_access = InlineKeyboardButton(text = "Доступ в интернет 🌐 (В разработке)⚠️", callback_data = "internet_access")
+			internet_access = InlineKeyboardButton(text = "Настройка доступа в интернет 🌐 (В разработке)⚠️", callback_data = "internet_access")
 			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔", callback_data="status_ip")
 
 			# buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
-			buttons_finish_list = [[status_ip], [back_button]]
+			buttons_finish_list = [[internet_access], [status_ip], [back_button]]
+
+		case "network_internet_access":
+			internet_access_ip = InlineKeyboardButton(text = "Поиск по IP 🌐", callback_data="internet_ip")
+			internet_access_vm = InlineKeyboardButton(text = "Поиск по оборудование или виртуальной машине 💻", callback_data="internet_vm")
+
+			buttons_finish_list = [[internet_access_ip], [internet_access_vm], [back_button]]
+
 		case "network_menu_status":
 			info_by_ip = InlineKeyboardButton(text = "Информация по IP 🌐", callback_data="status_ip_ip")
 			info_by_vm = InlineKeyboardButton(text = "Информация об оборудовании или виртуальной машине 💻 (В разработке)⚠️", callback_data="status_ip_vm")
@@ -242,14 +253,16 @@ async def admin_notification(type_message: str, work_id: int) -> None:
 	admin_raw_list = psql_cursor.fetchall()
 	admin_list = [item[0] for item in admin_raw_list]
 	if type_message == "ticket":
-
-		delete_notification_button = [[InlineKeyboardButton(text = "Удалить уведомление", callback_data = "delete_notification")]]
-		delete_keyboard = InlineKeyboardMarkup(inline_keyboard = delete_notification_button)
-
 		for admin_chat_id in admin_list:
-			msg = await bot.send_message(chat_id = admin_chat_id, text = f"Создано новое обращение по пробеме: {work_id}", reply_markup = delete_keyboard)
-			tmp_db_redis.lpush("notifications", f"[{msg.chat.id}, {msg.message_id}, {str(datetime.datetime.now())}]")
+			user_notification(chat_id = admin_chat_id, text = f"Создано новое обращение по пробеме: {work_id}", auto_clean = True)
 
+async def user_notification(chat_id: int, text: str, auto_clean: bool, parse = 'Markdown') -> None:
+	delete_notification_button = [[InlineKeyboardButton(text = "Удалить уведомление", callback_data = "delete_notification")]]
+	delete_keyboard = InlineKeyboardMarkup(inline_keyboard = delete_notification_button)
+
+	msg = await bot.send_message(chat_id=chat_id, text = text, parse_mode = parse, reply_markup=delete_keyboard)
+	if auto_clean:
+		tmp_db_redis.lpush("notifications", f"[{chat_id}, {msg.message_id}, {str(datetime.datetime.now())}]")
 
 # Main commands
 @dp.message(CommandStart())
@@ -271,7 +284,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 		await message.answer(f"Привет-привет, *{message.chat.username}*! Пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
 
 
-# Temp command for state check
+# Debug commands
 @dp.message(Command(commands=["state"]))
 async def state_check(message: Message, state: FSMContext):
 	current_state = await state.get_state()
@@ -299,6 +312,12 @@ async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
 			case "admin_plane:view_all_tickets":
 				await admin_plane_menu(callback, state)
 
+			case "network:internet_access":
+				await network_menu(callback, state)
+
+			case "network:internet_resp":
+				await internet_access(callback, state)
+			
 			case "network:status_ip":
 				await network_menu(callback, state)
 
@@ -320,6 +339,259 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 
 		await bot.send_message(chat_id = callback.from_user.id, text = "Настройки сети 🌐", reply_markup = keyboard)
 		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "internet_access", StateFilter(network.menu))
+async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.internet_access)
+		
+		keyboard = menu_buttons_build(None, "network_internet_access")
+		await bot.send_message(chat_id = callback.from_user.id, text = "Как будем искать? 🔍", reply_markup = keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "internet_vm", StateFilter(network.internet_access))
+async def internet_vm(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.internet_access_vm)
+
+		keyboard = menu_buttons_build(None, "back_only")
+		await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины 💻", reply_markup = keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "internet_ip", StateFilter(network.internet_access))
+async def internet_ip(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		await state.set_state(network.internet_access_ip)
+
+		keyboard = menu_buttons_build(None, "back_only")
+
+		await bot.send_message(chat_id = callback.from_user.id, text = "Введите один или несколько искомых IP-адресов разделяя запятой", reply_markup = keyboard)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.message(F.content_type.in_({'text'}), StateFilter(network.internet_access_ip, network.internet_access_vm))
+async def internet_resp(message: Message, state: FSMContext) -> None:
+	if check_session(session_db_redis, message.chat.username):
+		update_session(session_db_redis, message.chat.username)
+
+		current_state = await state.get_state()
+		await state.set_state(network.internet_resp)
+
+		status_msg = await bot.send_message(chat_id = message.chat.id, text = "_Запрос в базу данных..._", parse_mode='markdown')
+
+		keyboard_back = menu_buttons_build(None, "back_only")
+
+		search_request = message.text.replace(" ", "", -1)
+
+		operational_data = []
+
+		back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
+
+		if current_state == "network:internet_access_ip":
+			for address in search_request.split(","):
+				net_data = get_ip_info(address)
+				if net_data:
+					operational_data.append({"address": f'VIP: {net_data["address"]}' if net_data["role"] == "vip" else net_data["address"],
+							  "machine_name": net_data["custom_fields"]["Machine_Name"].split(" | ")})
+				else:
+					await bot.send_message(chat_id = message.chat.id, text = f"IP {address} не найден", reply_markup=keyboard_back)
+					await clean_message(message.chat.id, message.message_id, 2)
+					await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+					return None
+			
+			await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
+			
+			internet_flags = await get_ip_net_info(search_request.split(","))
+			
+			await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
+			
+			inline_buttons = []
+			
+			for i in range(len(operational_data)):
+				operational_data[i].update({"internet": internet_flags[i]})
+				internet_flag_access = InlineKeyboardButton(text = f"{operational_data[i]["address"]} {'✅' if operational_data[i]["internet"] else '❌'}", callback_data=f"internet_flag_{i}")
+				inline_buttons.append([internet_flag_access])
+
+			inline_buttons.append([back_button])
+
+			keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+			
+			data_message = await bot.send_message(chat_id = message.chat.id, text = "Доступ в интернет у следующих адресов:", reply_markup=keyboard)
+
+			result_operational_data = {"start_data": operational_data, "new_data": operational_data, "msg_id": data_message.message_id}
+
+			await state.set_data(result_operational_data)
+			
+			await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+		else:
+			vm_data = get_vm_info(message.text)
+			if len(vm_data) == 0:
+				await bot.send_message(chat_id=message.from_user.id, text = f"Информация о виртуальной машине {message.text} не найдена", reply_markup=keyboard_back)
+				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+				await clean_message(message.chat.id, message.message_id, 2)
+				return None
+			elif len(vm_data) == 1:
+				operational_data = []
+				for address in vm_data[0]["networks"]:
+					operational_data.append({"address": f'VIP: {address["address"]}' if address["role"] == "vip" else address["address"],
+							  "machine_name": address["Machine_Name"]})
+				
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
+				
+				internet_flags = []
+				for ip in vm_data[0]["networks"]:
+					internet_flags.append(ip["address"].split("/")[0])
+				internet_flags = await get_ip_net_info(internet_flags)
+				
+				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
+				
+				inline_buttons = []
+
+				for i in range(len(operational_data)):
+					operational_data[i].update({"internet": internet_flags[i]})
+					internet_flag_access = InlineKeyboardButton(text = f"{operational_data[i]["address"]} {'✅' if operational_data[i]["internet"] else '❌'}", callback_data=f"internet_flag_{i}")
+					inline_buttons.append([internet_flag_access])
+				
+				inline_buttons.append([back_button])
+				keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+
+				data_message = await bot.send_message(chat_id = message.chat.id, text = f"Доступ в интернет для {message.text}", reply_markup=keyboard)
+
+				result_operational_data = {"start_data": operational_data, "new_data": operational_data, "msg_id": data_message.message_id}
+
+				await state.set_data(result_operational_data)			
+				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+			else:
+				inline_buttons = []
+				machines_list = []
+				for i in range(len(vm_data)):
+					vm_search_button = InlineKeyboardButton(text = f"{vm_data[i]["Machine_Name"]}", callback_data=f"internet_search_vm_{i}")
+					inline_buttons.append([vm_search_button])
+					machines_list.append(vm_data[i]["Machine_Name"])
+				inline_buttons.append([back_button])
+				keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+
+				await state.set_data(machines_list)
+
+				await bot.send_message(chat_id=message.from_user.id, text = "Найденные варианты: 📋", reply_markup=keyboard)
+				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
+			
+
+		await clean_message(message.chat.id, message.message_id, 2)
+	else:
+		await end_session_notify(message, state)
+
+@dp.callback_query(F.data.startswith("internet_search_vm_"), StateFilter(network.internet_resp))
+async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		status_msg = await bot.send_message(chat_id = callback.from_user.id, text = "_Запрос в базу данных..._", parse_mode='markdown')
+		back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
+		search_index = int(callback.data.split("_", maxsplit=3)[3])
+		state_data = await state.get_data()
+		search_request = state_data[search_index]
+		vm_data = get_vm_info(search_request)
+
+		operational_data = []
+
+		for address in vm_data[0]["networks"]:
+			operational_data.append({"address": f'VIP: {address["address"]}' if address["role"] == "vip" else address["address"],
+							"machine_name": address["Machine_Name"]})
+			
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
+		internet_flags = []
+		for ip in vm_data[0]["networks"]:
+			internet_flags.append(ip["address"].split("/")[0])
+		internet_flags = await get_ip_net_info(internet_flags)
+
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
+		inline_buttons = []
+		for i in range(len(operational_data)):
+			operational_data[i].update({"internet": internet_flags[i]})
+			internet_flag_access = InlineKeyboardButton(text = f"{operational_data[i]["address"]} {'✅' if operational_data[i]["internet"] else '❌'}", callback_data=f"internet_flag_{i}")
+			inline_buttons.append([internet_flag_access])
+
+		inline_buttons.append([back_button])
+		keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+		data_message = await bot.send_message(chat_id = callback.from_user.id, text = f"Доступ в интернет для {search_request}", reply_markup=keyboard)
+		result_operational_data = {"start_data": operational_data, "new_data": operational_data, "msg_id": data_message.message_id}
+
+		await state.set_data(result_operational_data)			
+		await bot.delete_message(chat_id = callback.from_user.id, message_id=status_msg.message_id)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data.startswith("internet_flag_"), StateFilter(network.internet_resp))
+async def internet_change_flag(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		internet_flag_index = int(callback.data.split("_")[2])
+		operational_data = await state.get_data()
+		if operational_data["new_data"][internet_flag_index]["internet"]:
+			operational_data["new_data"][internet_flag_index]["internet"] = False
+		else:
+			operational_data["new_data"][internet_flag_index]["internet"] = True
+
+		await state.set_data(operational_data)
+		
+		back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
+		internet_apply = InlineKeyboardButton(text = f"Подтвердить", callback_data="internet_apply")
+		inline_buttons = []
+
+		for i in range(len(operational_data["new_data"])):
+			internet_flag_access = InlineKeyboardButton(text = f"{operational_data["new_data"][i]["address"]} {'✅' if operational_data["new_data"][i]["internet"] else '❌'}", callback_data=f"internet_flag_{i}")
+			inline_buttons.append([internet_flag_access])
+
+		inline_buttons.append([internet_apply])
+		inline_buttons.append([back_button])
+
+		keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+
+		await bot.edit_message_reply_markup(chat_id = callback.from_user.id, message_id=operational_data["msg_id"], reply_markup=keyboard)
+
+	else:
+		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "internet_apply", StateFilter(network.internet_resp))
+async def internet_change_task(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+
+		operational_data = await state.get_data()
+
+		delta = []
+
+		for i in range(len(operational_data["start_data"])):
+			if operational_data["start_data"][i] != operational_data["new_data"][i]:
+				delta.append(operational_data["new_data"][i])
+			
+		if len(delta) == 0:
+			msg = "Отсутствие изменений. Действия не будут выполнены"
+		else:
+			# def TASK
+			msg = f"Создана задача с номером: _1_\nИзменений: _{len(delta)}_"
+			print(operational_data)
+		
+		await user_notification(chat_id = callback.from_user.id, text = msg, auto_clean = True)
+		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await main_menu_cal(callback, state)
+
 	else:
 		await end_session_notify(callback, state)
 
@@ -375,7 +647,6 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		
 		keyboard = menu_buttons_build(None, "network_menu_status")
 
-		# await bot.send_chat_action(chat_id = message.chat.id, action = "typing")
 		status_msg = await bot.send_message(chat_id = message.chat.id, text = "_Запрос в базу данных..._", parse_mode='markdown')
 
 		if current_state == "network:status_ip_ip":
@@ -403,7 +674,8 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 			else:
 				msg = f"IP: {message.text}\n\nСтатус: Available"
 
-			await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+			await user_notification(chat_id = message.chat.id, text = msg, auto_clean = False, parse=None)
+			await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
 			try:
 				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
 			except:
@@ -446,9 +718,11 @@ IP: {ip["address"]}
 
 				if len(msg) > 4096:
 					for x in range(0, len(msg), 4096):
-						await bot.send_message(chat_id = message.chat.id, text = msg[x:x + 4096], reply_markup = keyboard)
+						await user_notification(chat_id = message.chat.id, text = msg[x:x + 4096], auto_clean = False, parse=None)
 				else:
-					await bot.send_message(chat_id = message.chat.id, text = msg, reply_markup = keyboard)
+					await user_notification(chat_id = message.chat.id, text = msg, auto_clean = False, parse=None)
+				
+				await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
 
 				try:
 					await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
@@ -586,12 +860,8 @@ async def send_report_notify(callback: CallbackQuery, state: FSMContext) -> None
 	user_data = load_user_data(session_db_redis, callback.from_user.username, ["chat_id", "tg_username", "ldap_fullname", "access_level"])
 	report_num = await send_report(state_data, user_data)
 
-	delete_notification_button = [[InlineKeyboardButton(text = "Удалить уведомление", callback_data = "delete_notification")]]
-	delete_keyboard = InlineKeyboardMarkup(inline_keyboard = delete_notification_button)
-
 	logging.debug(f"Пользователь {callback.from_user.username} отправил репорт. State={await state.get_state()}. State_data={state_data}")
-	await bot.send_message(chat_id = callback.from_user.id, text = f"Ваш запрос успешно отправлен!\nНомер запроса: *{report_num}*", parse_mode = 'Markdown', reply_markup = delete_keyboard)
-	tmp_db_redis.lpush("notifications", f"[{callback.from_user.id}, {callback.message.message_id}, {str(datetime.datetime.now())}]")
+	await user_notification(chat_id = callback.from_user.id, text = f"Ваш запрос успешно отправлен!\nНомер запроса: *{report_num}*", auto_clean = True)
 
 	await main_menu_cal(callback, state)
 

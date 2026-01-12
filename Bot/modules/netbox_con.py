@@ -21,7 +21,7 @@ def get_ip_info(ip: str) -> dict:
 		query{{
 			ip_address_list(filters: {{
 				address: {{
-					regex: "{ip}/"
+					i_starts_with: "{ip}/"
 				}}
 			}})
 			{{
