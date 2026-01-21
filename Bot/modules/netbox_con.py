@@ -38,7 +38,10 @@ def get_ip_info(ip: str) -> dict:
 	}
 	config = bot_config_read()["netbox"]
 	logging.debug(f"Запрос в Netbox: https://{config["address"]}/graphql/\nHeaders: {headers}\nPayload: {body}")
-	response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	try:
+		response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	except:
+		return "Error"
 	logging.debug(f"Успешный запрос! Код: {response.status_code} | Ответ: {response.text}")
 	try:
 		return response.json()["data"]["ip_address_list"][0]
@@ -76,7 +79,10 @@ def get_vm_info(vm: str) -> dict:
 	}
 	config = bot_config_read()["netbox"]
 	logging.debug(f"Запрос в Netbox: https://{config["address"]}/graphql/\nHeaders: {headers}\nPayload: {body}")
-	raw_response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	try:
+		raw_response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
+	except:
+		return "Error"
 	logging.debug(f"Успешный запрос! Код: {raw_response.status_code} | Ответ: {raw_response.text}")
 	try:
 		response = []
@@ -91,7 +97,6 @@ def get_vm_info(vm: str) -> dict:
 					"status": obj["status"],
 					"tenant": obj["tenant"]["name"]})
 			else:
-				vm_names = obj["custom_fields"]["Machine_Name"].split(" | ")
 				all_vm.append(vm_names[0])
 				response.append({"Machine_Name": vm_names[0],
 						"networks": [{"Machine_Name": vm_names,
@@ -100,7 +105,7 @@ def get_vm_info(vm: str) -> dict:
 					"role": obj["role"],
 					"status": obj["status"],
 					"tenant": obj["tenant"]["name"]}]})
-	
 		return response
-	except:
+	except Exception as error: 
+		logging.debug(f"Ошибка обработки запроса:\n{error}")
 		return ""

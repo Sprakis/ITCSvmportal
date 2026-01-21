@@ -35,6 +35,7 @@
 		},
 		"check_session_pause": 60, #interval check session (seconds)
 		"session_seconds_timeout": 3600, #session timeout (seconds)
-		"notification_delete_timer_sec": 15 #notification auto-delete timer (second)
+		"notification_delete_timer_sec": 15, #notification auto-delete timer (second)
+		"check_new_tasks": 60 #check new tasks in database interval (second)
 	}
 }

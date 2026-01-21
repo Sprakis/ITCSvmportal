@@ -74,6 +74,15 @@ Option: """)
 				if 'docker' in sys.modules:
 					docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
 
+					print("Delete backups")
+					for container in docker_client.containers.list(all = True):
+						if container.name == "itcs_vmpb_timerman_backup":
+							container.remove(v = True)
+						if container.name == "itcs_vm_portal_bot_backup":
+							container.remove(v = True) 
+
+					msg = "Backup containers successfully deleted"
+
 					print("Backups containers")
 
 					for container in docker_client.containers.list(all = True):
