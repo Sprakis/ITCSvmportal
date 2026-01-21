@@ -190,10 +190,12 @@ def menu_buttons_build(access_level: str, path: str):
 			# tasks_center_button = InlineKeyboardButton(text = "Просмотр запланированных задач 🗓(НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "notifications_center_menu")
 
 			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢", callback_data = "report_menu")
+
+			last_update_button = InlineKeyboardButton(text = "Узнать о последнем обновлени ❔", callback_data = "last_update")
 			
 			end_session_button = InlineKeyboardButton(text = "Завершить сессию 🚪", callback_data = "session_end")
 
-			main_buttons = [[network_menu_button], [report_button], [end_session_button]]
+			main_buttons = [[network_menu_button], [report_button], [last_update_button], [end_session_button]]
 			if access_level == "Admin":
 				buttons_finish_list = [[admin_plane_button]] + main_buttons
 			else:
@@ -1356,7 +1358,18 @@ async def media_add(callback: CallbackQuery, state: FSMContext) -> None:
 		await end_session_notify(callback, state)
 
 
+@dp.callback_query(F.data == "last_update", StateFilter(main_states.menu))
+async def last_update_get(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
 
+		with open("./last_update_info.txt", "r") as update_info_file:
+			last_update_data = update_info_file.read()
+
+		await user_notification(chat_id=callback.from_user.id, text = last_update_data, auto_clean=False, parse=None)
+
+	else:
+		await end_session_notify(callback, state)
 
 async def main() -> None:
 	config = bot_config_read()["logs"]
