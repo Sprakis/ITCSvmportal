@@ -124,8 +124,7 @@ async def tasks_reader() -> None:
 			work_data = []
 			for task in tasks_list:
 				logging.debug(f"Задача {task[0]} помечена как Running")
-				psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Running' WHERE id = '{task[0]}'""")
-				psql_cursor.execute(f"""UPDATE "Tasks table" SET last_change_date = '{datetime.datetime.now()}' WHERE id = '{task[0]}'""")
+				psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Running', last_change_date = '{datetime.datetime.now()}' WHERE id = '{task[0]}'""")
 				work_data.append({"id": task[0],
 					  "owner_id": task[1],
 					  "data": task[2]})
@@ -136,16 +135,16 @@ async def tasks_reader() -> None:
 				for task_result in work_result_data:
 					if task_result["status"] == "F":
 						logging.debug(f"Задача {task_result["id"]} - успешно выполнена. Задача помечена как Complete")
-						psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Complete' WHERE id = '{task_result["id"]}'""")
+						psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Complete', last_change_date = '{datetime.datetime.now()}' WHERE id = '{task_result["id"]}'""")
 						logging.debug(f"Создатель задачи {task_result["id"]} уведомлен о завершении")
 						await user_notification(chat_id=task_result["owner_id"], text=f"Задача с номером {task_result["id"]} - Выдача доступа в интернет\n*Выполнена*")
 					else:
 						logging.debug(f"Задача {task_result["id"]} - выполнена с ошибками. Задача помечена как Waiting")
-						psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Waiting', comment = 'Finish with Errors' WHERE id = '{task_result["id"]}'""")
+						psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Waiting', comment = 'Finish with Errors', last_change_date = '{datetime.datetime.now()}' WHERE id = '{task_result["id"]}'""")
 			else:
 				logging.debug(f"Пул задач выполнен. Результат = {work_result_data}. Задачи помечены как Waiting")
 				for task in tasks_list:
-					psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Waiting', comment = 'Finish with Errors' WHERE id = '{task[0]}'""")
+					psql_cursor.execute(f"""UPDATE "Tasks table" SET status = 'Waiting', comment = 'Finish with Errors', last_change_date = '{datetime.datetime.now()}' WHERE id = '{task[0]}'""")
 		else:
 			pass
 

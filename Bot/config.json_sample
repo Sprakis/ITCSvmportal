@@ -26,7 +26,9 @@
 		"internet_group": "internet_access", #Name for ip address group with internet access
 		"location_type": "vsys", #virtual system type
 		"location_name": "vsys1", #virtyal system name
-		"api_version": "v11.1" #API version
+		"api_version": "v11.1", #API version
+		"internet_group_tag": "tag1", #Tag for objects group with internet access
+		"internet_objects_tag": "tag2" #Tag for objects with internet access
 	},
 	"timerman": {
 		"logs": {

@@ -153,7 +153,7 @@ def create_address_object(api_key: str, address: str, object_name: str, exists_a
 				"entry": {
 					"@name": object_name,
 					"tag": {
-						"member": ["internet_for_datacenter_VM"]
+						"member": [config["internet_objects_tag"]]
 					},
 					"ip-netmask": address
 				}
@@ -297,7 +297,10 @@ def change_internet_on_ip(work_data: dict) -> tuple:
 				"static": {
 					"member": internet_group_members
 				},
-				"@name": config["internet_group"]
+				"@name": config["internet_group"],
+				"tag": {
+					"member": [config["internet_group_tag"]]
+				}
 			}
 		}
 		logging.debug(f"Применение нового состава {config["internet_group"]}")
