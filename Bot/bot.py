@@ -683,6 +683,7 @@ async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
 
 		for address in vm_data[0]["networks"]:
 			operational_data.append({"address": address["address"],
+							"role": address["role"],
 							"machine_name": address["Machine_Name"]})
 			
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
