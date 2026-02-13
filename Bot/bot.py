@@ -151,6 +151,7 @@ webapp = WebAppInfo(url=os.getenv("webapp_url"))
 
 class network(StatesGroup):
 	menu = State()
+	add_ip_form = State()
 	internet_access = State()
 	internet_access_ip = State()
 	internet_access_vm = State()
@@ -228,7 +229,7 @@ def menu_buttons_build(access_level: str, path: str):
 			buttons_finish_list = [[announcement_apply_button], [back_button]]
 		
 		case "network_menu":
-			add_ip = InlineKeyboardButton(text = "Выделение IP адреса ➕ (В разработке)⚠️", callback_data = "add_ip")
+			add_ip = InlineKeyboardButton(text = "Выделение IP адреса ➕ (В разработке)⚠️", callback_data = "network_add_ip")
 			clean_ip = InlineKeyboardButton(text = "Освобождение IP ➖ (В разработке)⚠️", callback_data = "clean_ip")
 			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
 			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
@@ -282,6 +283,8 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 			keyboard = menu_buttons_build(access_level, "main_menu")
 		else:
 			await bot.send_message(chat_id = chat_id, text = "К сожалению у вас нет доступа", reply_markup = login_keyboard)
+			await clean_message(message.chat.id, message.message_id, 3)
+			return
 		
 		if new_session(session_db_redis, tg_username, chat_id, ldap_username, ldap_fullname, access_level):
 			await state.set_state(main_states.menu)
@@ -358,8 +361,8 @@ async def create_task(type: str, owner: str, owner_id: int, start_date: str, dat
 	logging.debug(f"""Формулировка запроса в SQL:\nINSERT INTO "Tasks table" (type, status, owner, owner_id, start_date, last_change_date, data) VALUES ('{type}','{status}','{owner}','{owner_id}','{start_date}','{start_date}','{json.dumps(data)}')""")
 	try:
 		psql_cursor.execute(f"""INSERT INTO "Tasks table" (type, status, owner, owner_id, start_date, last_change_date, data) VALUES ('{type}','{status}','{owner}','{owner_id}','{start_date}','{start_date}','{json.dumps(data)}')""")
-	except:
-		logging.error(f"Ошибка при отправке запроса SQL")
+	except psycopg2.OperationalError as e:
+		logging.error(f"Ошибка при отправке запроса SQL {e}")
 	
 	tmp = (psql_cursor.statusmessage or "").split()
 	if len(tmp) > 0:
@@ -412,6 +415,9 @@ def batcher(request: str) -> list:
 			result.append(temp_group)
 	return list(dict.fromkeys(result))
 
+def alphabet_match(text: str, alphabet=set('abcdefghijklmnopqrstuvwxyz_-.')) -> bool:
+	return not alphabet.isdisjoint(text.lower())
+
 # Main commands
 @dp.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
@@ -463,8 +469,14 @@ async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
 			case "admin_plane:announcement":
 				await admin_plane_menu(callback, state)
 
+			case "network:add_ip_form":
+				await network_menu(callback, state)
+
 			case "network:internet_access":
 				await network_menu(callback, state)
+
+			case "network:internet_access_ip" | "network:internet_access_vm":
+				await internet_access(callback, state)
 
 			case "network:internet_resp":
 				await internet_access(callback, state)
@@ -487,11 +499,42 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 		await state.set_state(network.menu)
 
 		keyboard = menu_buttons_build(None, "network_menu")
-
-		await bot.send_message(chat_id = callback.from_user.id, text = "Настройки сети 🌐", reply_markup = keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id, text = "Настройки сети 🌐", reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Настройки сети 🌐", reply_markup = keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
+
+@dp.callback_query(F.data == "network_add_ip", StateFilter(network.menu))
+async def internet_add_ip(callback: CallbackQuery, state: FSMContext) -> None:
+	if check_session(session_db_redis, callback.from_user.username):
+		update_session(session_db_redis, callback.from_user.username)
+		
+		await state.set_state(network.add_ip_form)
+
+		back_button = InlineKeyboardButton(text = "Назад 🔙", callback_data = "back")
+		add_ip_button = InlineKeyboardButton(text = "Добавить IP-адрес", callback_data = "add_ip")
+		apply_ip_button = InlineKeyboardButton(text = "Подтвердить добавление", callback_data = "apply_ip")
+
+		data = await state.get_data()
+
+		inline_buttons = []
+
+		for i in range(len(data)):
+			ip_button = InlineKeyboardButton(text = f"{data[i]["address"]}", callback_data = f"ip_{i}")
+			inline_buttons.append([ip_button])
+
+		inline_buttons.append([add_ip_button])
+		if len(inline_buttons) > 1:
+			inline_buttons.append([apply_ip_button])	
+		inline_buttons.append([back_button])
+		keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
+		
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id, text = "Заполните необходимые данные", reply_markup=keyboard)
+	else:
+		await end_session_notify(callback, state)
+	return
 
 @dp.callback_query(F.data == "internet_access", StateFilter(network.menu))
 async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
@@ -501,8 +544,9 @@ async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
 		await state.set_state(network.internet_access)
 		
 		keyboard = menu_buttons_build(None, "network_internet_access")
-		await bot.send_message(chat_id = callback.from_user.id, text = "Как будем настраивать? 🔍", reply_markup = keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id, text = "Как будем настраивать? 🔍", reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Как будем настраивать? 🔍", reply_markup = keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -514,8 +558,11 @@ async def internet_vm(callback: CallbackQuery, state: FSMContext) -> None:
 		await state.set_state(network.internet_access_vm)
 
 		keyboard = menu_buttons_build(None, "back_only")
-		await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины 💻", reply_markup = keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
+							  text = "Введите название виртуальной машины 💻",
+							  reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины 💻", reply_markup = keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -528,8 +575,11 @@ async def internet_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build(None, "back_only")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Введите один или несколько искомых IP-адресов (без указания маски)\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",parse_mode = 'Markdown', reply_markup = keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
+							  text = "Введите один или несколько искомых IP-адресов (без указания маски)\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",
+							  reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите один или несколько искомых IP-адресов (без указания маски)\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",parse_mode = 'Markdown', reply_markup = keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -638,7 +688,7 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 				inline_buttons.append([back_button])
 				keyboard = InlineKeyboardMarkup(inline_keyboard = inline_buttons)
 
-				data_message = await bot.send_message(chat_id = message.chat.id, text = f"Доступ в интернет для {message.text}\nНажмите на IP-адрес для изменения доступа на противоположный", reply_markup=keyboard)
+				data_message = await bot.send_message(chat_id = message.chat.id, text = f"Доступ в интернет для {vm_data[0]["networks"][0]["Machine_Name"][0]}\nНажмите на IP-адрес для изменения доступа на противоположный", reply_markup=keyboard)
 
 				result_operational_data = {"start_data": operational_data, "new_data": operational_data, "msg_id": data_message.message_id}
 
@@ -785,8 +835,11 @@ async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build(None, "network_menu_status")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Что узнаем? 🤔", reply_markup=keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
+							  text = "Что узнаем? 🤔",
+							  reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Что узнаем? 🤔", reply_markup=keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -799,8 +852,12 @@ async def status_ip_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build(None, "back_only")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Введите запрос для поиска IP-адреса\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54", parse_mode = 'Markdown', reply_markup=keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
+							  text = "Введите запрос для поиска IP-адреса\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",
+							  parse_mode = 'Markdown',
+							  reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите запрос для поиска IP-адреса\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54", parse_mode = 'Markdown', reply_markup=keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -813,8 +870,11 @@ async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build(None, "back_only")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины или его часть", reply_markup=keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
+							  text = "Введите название виртуальной машины или его часть",
+							  reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины или его часть", reply_markup=keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -988,8 +1048,9 @@ async def admin_plane_menu(callback: CallbackQuery, state: FSMContext) -> None:
 
 		keyboard = menu_buttons_build("Admin", "admin_plane")
 
-		await bot.send_message(chat_id = callback.from_user.id, text = "Панель Администратора👑", reply_markup = keyboard)
-		await clean_message(callback.from_user.id, callback.message.message_id, 1)
+		await bot.edit_message_text(chat_id =callback.from_user.id, message_id = callback.message.message_id, text = "Панель Администратора👑", reply_markup = keyboard)
+		# await bot.send_message(chat_id = callback.from_user.id, text = "Панель Администратора👑", reply_markup = keyboard)
+		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -1060,10 +1121,13 @@ async def all_tickets(callback: CallbackQuery, state: FSMContext):
 
 			await state.set_data({"ticket_number": ticket_number})
 
-			await bot.send_message(chat_id = callback.from_user.id,
-					text = f"Тикет: {ticket_number}\nСостояние: *{ticket_state}*\nОтправитель: @{ticket_owner_username}\n\n_{ticket_text}_",
-					parse_mode = "Markdown", reply_markup = keyboard)
-			await clean_message(callback.from_user.id, callback.message.message_id, 12)
+			await bot.edit_message_text(chat_id = callback.from_user.id, message_id=callback.message.message_id,
+							   text = f"Тикет: {ticket_number}\nСостояние: *{ticket_state}*\nОтправитель: @{ticket_owner_username}\n\n_{ticket_text}_",
+							   parse_mode = "Markdown", reply_markup = keyboard)
+			# await bot.send_message(chat_id = callback.from_user.id,
+			# 		text = f"Тикет: {ticket_number}\nСостояние: *{ticket_state}*\nОтправитель: @{ticket_owner_username}\n\n_{ticket_text}_",
+			# 		parse_mode = "Markdown", reply_markup = keyboard)
+			# await clean_message(callback.from_user.id, callback.message.message_id, 12)
 		
 		else:
 			keyboard = menu_buttons_build(None, "back_only")
@@ -1099,7 +1163,10 @@ async def main_menu_cal(callback: CallbackQuery, state: FSMContext) -> None:
 	await state.set_state(main_states.menu)
 	
 	user_data = load_user_data(session_db_redis, callback.from_user.username, ["ldap_fullname", "access_level"])
-	await bot.send_message(chat_id = callback.from_user.id, text = f"Добро пожаловать *{user_data["ldap_fullname"]}*!\nУровень доступа: _{user_data["access_level"]}_", parse_mode = 'Markdown', reply_markup = menu_buttons_build(user_data["access_level"], "main_menu"))
+	await bot.send_message(chat_id = callback.from_user.id,
+						text = f"Добро пожаловать *{user_data["ldap_fullname"]}*!\nУровень доступа: _{user_data["access_level"]}_",
+						parse_mode = 'Markdown',
+						reply_markup = menu_buttons_build(user_data["access_level"], "main_menu"))
 	
 	await clean_message(callback.from_user.id, callback.message.message_id, 12)
 

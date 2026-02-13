@@ -232,7 +232,7 @@ def change_internet_on_ip(work_data: dict) -> tuple:
 			task_result.append({"id": task["id"], "owner_id": task["owner_id"], "status": "S"})
 			addresses = json.loads(task["data"])
 			for ip in addresses:
-				object_name = f"host_{ip["address"].split("/")[0]}_{ip["machine_name"][0]}"
+				object_name = f"host_{ip["address"].split("/")[0]}_{ip["machine_name"][0].split("[")[0].replace(" ", "", -1)}"
 				logging.debug(f"Обработка адреса: {ip["address"]} - {object_name}")
 				if ip["internet"]:
 					logging.debug(f"Разрешение доступа для {ip["address"]}")
