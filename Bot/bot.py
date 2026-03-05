@@ -659,6 +659,7 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 				operational_data = []
 				for address in vm_data[0]["networks"]:
 					operational_data.append({"address": f'VIP: {address["address"]}' if address["role"] == "vip" else address["address"],
+							  "role": address["role"],
 							  "machine_name": address["Machine_Name"]})
 				
 				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
