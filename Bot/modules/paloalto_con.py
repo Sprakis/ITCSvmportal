@@ -3,7 +3,6 @@ import os
 import requests
 import urllib3
 urllib3.disable_warnings()
-import asyncio
 import logging
 
 def bot_config_read() -> dict:

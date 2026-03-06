@@ -61,27 +61,38 @@ psql_conn = psycopg2.connect(user = os.getenv("postsql_username"),
 psql_conn.set_session(autocommit=True)
 psql_cursor = psql_conn.cursor()
 
+def database_request(request: str, fetch_type: str = None, data: dict = None) -> list:
+	with psql_conn.cursor() as psql_cursor:
+		psql_cursor.execute(request, data)
+		match fetch_type:
+			case "one":
+				return psql_cursor.fetchone()
+			case "all":
+				return psql_cursor.fetchall()
+			case "rowcount":
+				return psql_cursor.rowcount
+			case "statusmessage":
+				return psql_cursor.statusmessage
+			case _:
+				pass
 
 def psql_connect() -> str:
-	psql_cursor.execute("SELECT version();")
-	return psql_cursor.fetchone()
+	return database_request(request="SELECT version();", fetch_type="one")
 
 # psql check_tables
-psql_cursor.execute("""select * from information_schema.tables where table_name='Admins table';""")
-if bool(psql_cursor.rowcount):
+if bool(database_request(request="""select * from information_schema.tables where table_name='Admins table';""", fetch_type="rowcount")):
 	print("Admins table - Exist")
 else:
-	psql_cursor.execute("""CREATE TABLE public."Admins table" (
+	database_request(request="""CREATE TABLE public."Admins table" (
 	username character varying(24) NOT NULL,
 	chat_id bigint NOT NULL
 );""")
 	print("Admins table - Created")
 
-psql_cursor.execute("""select * from information_schema.tables where table_name='Reports table';""")
-if bool(psql_cursor.rowcount):
+if bool(database_request(request="""select * from information_schema.tables where table_name='Reports table';""", fetch_type="rowcount")):
 	print("Reports table - Exist")
 else:
-	psql_cursor.execute("""CREATE TABLE public."Reports table" (
+	database_request(request="""CREATE TABLE public."Reports table" (
 	text character varying(4096) NOT NULL,
 	status character varying(6) NOT NULL,
 	attachments_hashs text,
@@ -90,16 +101,16 @@ else:
 	"ID_rep" bigint NOT NULL,
 	PRIMARY KEY ("ID_rep")
 );""")
-	psql_cursor.execute("""CREATE SEQUENCE public."Reports table_ID_rep_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	psql_cursor.execute("""ALTER SEQUENCE public."Reports table_ID_rep_seq" OWNED BY public."Reports table"."ID_rep";""")
-	psql_cursor.execute("""ALTER TABLE IF EXISTS public."Reports table" ALTER COLUMN "ID_rep" SET DEFAULT nextval('"Reports table_ID_rep_seq"'::regclass);""")
+	database_request(request="""CREATE SEQUENCE public."Reports table_ID_rep_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
+	database_request(request="""ALTER SEQUENCE public."Reports table_ID_rep_seq" OWNED BY public."Reports table"."ID_rep";""")
+	database_request(request="""ALTER TABLE IF EXISTS public."Reports table" ALTER COLUMN "ID_rep" SET DEFAULT nextval('"Reports table_ID_rep_seq"'::regclass);""")
 	print("Reports table - Created")
 
-psql_cursor.execute("""select * from information_schema.tables where table_name='Requests table';""")
-if bool(psql_cursor.rowcount):
+
+if bool(database_request(request="""select * from information_schema.tables where table_name='Requests table';""", fetch_type="rowcount")):
 	print("Requests table - Exist")
 else:
-	psql_cursor.execute("""CREATE TABLE public."Requests table" (
+	database_request(request="""CREATE TABLE public."Requests table" (
 	"ID" bigint NOT NULL,
 	type character varying(6) NOT NULL,
 	owner_ldap_fullname character varying(30),
@@ -107,16 +118,16 @@ else:
 	owner_username character varying(30) NOT NULL,
 	PRIMARY KEY ("ID")
 );""")
-	psql_cursor.execute("""CREATE SEQUENCE public."Requests table_ID_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	psql_cursor.execute("""ALTER SEQUENCE public."Requests table_ID_seq" OWNED BY public."Requests table"."ID";""")
-	psql_cursor.execute("""ALTER TABLE IF EXISTS public."Requests table" ALTER COLUMN "ID" SET DEFAULT nextval('"Requests table_ID_seq"'::regclass);""")
+	database_request(request="""CREATE SEQUENCE public."Requests table_ID_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
+	database_request(request="""ALTER SEQUENCE public."Requests table_ID_seq" OWNED BY public."Requests table"."ID";""")
+	database_request(request="""ALTER TABLE IF EXISTS public."Requests table" ALTER COLUMN "ID" SET DEFAULT nextval('"Requests table_ID_seq"'::regclass);""")
 	print("Requests table - Created")
 
-psql_cursor.execute("""select * from information_schema.tables where table_name='Tasks table';""")
-if bool(psql_cursor.rowcount):
+
+if bool(database_request(request="""select * from information_schema.tables where table_name='Tasks table';""", fetch_type="rowcount")):
 	print("Tasks table - Exist")
 else:
-	psql_cursor.execute("""CREATE TABLE public."Tasks table" (
+	database_request(request="""CREATE TABLE public."Tasks table" (
     id bigint NOT NULL,
     type character varying(100) NOT NULL,
     status character varying(12) NOT NULL,
@@ -128,16 +139,16 @@ else:
     comment character varying(100),
     PRIMARY KEY (id)
 );""")
-	psql_cursor.execute("""CREATE SEQUENCE public."Tasks table_id_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	psql_cursor.execute("""ALTER SEQUENCE public."Tasks table_id_seq" OWNED BY public."Tasks table"."id";""")
-	psql_cursor.execute("""ALTER TABLE IF EXISTS public."Tasks table" ALTER COLUMN "id" SET DEFAULT nextval('"Tasks table_id_seq"'::regclass);""")
+	database_request(request="""CREATE SEQUENCE public."Tasks table_id_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
+	database_request(request="""ALTER SEQUENCE public."Tasks table_id_seq" OWNED BY public."Tasks table"."id";""")
+	database_request(request="""ALTER TABLE IF EXISTS public."Tasks table" ALTER COLUMN "id" SET DEFAULT nextval('"Tasks table_id_seq"'::regclass);""")
 	print("Tasks table - Created")
 
-psql_cursor.execute("""select * from information_schema.tables where table_name='Users table';""")
-if bool(psql_cursor.rowcount):
+
+if bool(database_request(request="""select * from information_schema.tables where table_name='Users table';""", fetch_type="rowcount")):
 	print("Users table - Exist")
 else:
-	psql_cursor.execute("""CREATE TABLE public."Users table" (
+	database_request(request="""CREATE TABLE public."Users table" (
     username character varying NOT NULL,
     chat_id bigint NOT NULL,
     domain_username character varying NOT NULL
@@ -261,11 +272,11 @@ async def clean_message(chat_id: int, message_id: int, count: int) -> None:
 			pass
 
 async def end_session_notify(message: Message, state: FSMContext) -> None:
-	login_button = [KeyboardButton(text = f"Авторизироваться как {message.chat.username}", web_app = webapp)]
+	login_button = [KeyboardButton(text = f"Авторизироваться как {message.from_user.username}", web_app = webapp)]
 	login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
 
 	await state.clear()
-	await message.answer(f"Привет-привет *{message.chat.username}* пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
+	await bot.send_message(chat_id = message.from_user.id, text = f"Привет-привет *{message.from_user.username}* пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
 
 @dp.message(F.content_type == ContentType.WEB_APP_DATA)
 async def web_app_logon(message: Message, state: FSMContext) -> None:
@@ -304,30 +315,28 @@ async def delete_notification(callback: CallbackQuery) -> None:
 	await clean_message(callback.from_user.id, callback.message.message_id, 1)
 
 def update_admins_table(access_level, tg_username, chat_id) -> None:
-	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table" WHERE chat_id = '{chat_id}'""")
-	if psql_cursor.fetchone():
+	if database_request(request="""SELECT chat_id FROM "Admins table" WHERE chat_id = %s""", data=(chat_id,), fetch_type="one"):
 		logging.debug(f"Пользователь {tg_username}:{chat_id} найден среди администраторов")
 		if access_level == "User":
-			psql_cursor.execute(f"""DELETE FROM "Admins table" WHERE chat_id = '{chat_id}'""")
+			database_request(request="""DELETE FROM "Admins table" WHERE chat_id = %s""", data=(chat_id,))
 			logging.debug(f"Пользователь {tg_username}:{chat_id} удален из списка администраторов")
 	else:
 		if access_level == "Admin":
-			psql_cursor.execute(f"""INSERT INTO "Admins table" (username, chat_id) VALUES ('{tg_username}','{chat_id}')""")
+			database_request(request="""INSERT INTO "Admins table" (username, chat_id) VALUES (%s,%s)""", data=(tg_username, chat_id))
 			logging.debug(f"Пользователь {tg_username}:{chat_id} добавлен в список администраторов")
 
 def update_users_table(tg_username: str, chat_id: int, ldap_fullname: str) -> None:
-	psql_cursor.execute(f"""SELECT chat_id FROM "Users table" WHERE chat_id = '{chat_id}'""")
-	result = psql_cursor.fetchone()
+	result = database_request(request="""SELECT chat_id FROM "Users table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one")
 	if result:
 		logging.debug(f"Пользователь {tg_username}:{chat_id} найден в Users")
 		if (result[0] == tg_username and result[2] == ldap_fullname):
 			logging.debug(f"Изменения в Users для {tg_username}:{chat_id} не требуются")
 		else:
 			logging.debug(f"Пользователь {tg_username}:{chat_id} обновлен")
-			psql_cursor.execute(f"""UPDATE "Users table" SET username = '{tg_username}', domain_username = '{ldap_fullname}' WHERE chat_id = '{chat_id}'""")
+			database_request(request="""UPDATE "Users table" SET username = %s, domain_username = %s WHERE chat_id = %s""", data=(tg_username, ldap_fullname, chat_id))
 	else:
 		logging.debug(f"Пользователь {tg_username}:{chat_id} не найден в Users и будет создан")
-		psql_cursor.execute(f"""INSERT INTO "Users table" (username, chat_id, domain_username) VALUES ('{tg_username}','{chat_id}','{ldap_fullname}')""")
+		database_request(request="""INSERT INTO "Users table" (username, chat_id, domain_username) VALUES (%s,%s,%s)""", data=(tg_username, chat_id, ldap_fullname))
 
 async def send_report(state_data: dict, user_data: dict) -> None:
 	data_hash = {}
@@ -337,7 +346,8 @@ async def send_report(state_data: dict, user_data: dict) -> None:
 		data_hash.update({"photo_id_list": state_data["photo_id_list"]})
 	
 	try:
-		psql_cursor.execute(f"""INSERT INTO "Reports table" (text, status, attachments_hashs, chat_id, username) VALUES ('{state_data["text"]}','OPEN','{json.dumps(data_hash)}','{user_data["chat_id"]}','{user_data["tg_username"]}');""")
+		database_request(request="""INSERT INTO "Reports table" (text, status, attachments_hashs, chat_id, username)
+				   VALUES (%s,'OPEN',%s,%s,%s);""", data=(state_data["text"], json.dumps(data_hash), user_data["chat_id"], user_data["tg_username"]))
 		logging.debug(f"""Формулировка запроса в SQL:\nINSERT INTO "Reports table" (text, status, attachments_hashs, chat_id, username) VALUES ('{state_data["text"]}','OPEN','{data_hash}','{user_data["chat_id"]}','{user_data["tg_username"]}');""")
 	except:
 		logging.error(f"Ошибка при отправке запроса SQL")
@@ -349,8 +359,9 @@ async def send_report(state_data: dict, user_data: dict) -> None:
 		rowcount = -1
 
 	if rowcount == 1:
-		psql_cursor.execute(f"""SELECT "ID_rep" FROM "Reports table" WHERE text = '{state_data["text"]}' and attachments_hashs = '{json.dumps(data_hash)}' and chat_id = '{user_data["chat_id"]}' and username = '{user_data["tg_username"]}'""")
-		report_number = psql_cursor.fetchone()[0]
+		report_number = database_request(request="""SELECT "ID_rep" FROM "Reports table"
+				   WHERE text = %s and attachments_hashs = %s and chat_id = %s and username = %s""",
+				   data=(state_data["text"], json.dumps(data_hash), user_data["chat_id"], user_data["tg_username"]), fetch_type="one")[0]
 		await admin_notification("ticket", report_number)
 		return report_number
 	else:
@@ -359,28 +370,30 @@ async def send_report(state_data: dict, user_data: dict) -> None:
 
 async def create_task(type: str, owner: str, owner_id: int, start_date: str, data, status = "Waiting") -> int:
 	logging.debug(f"""Формулировка запроса в SQL:\nINSERT INTO "Tasks table" (type, status, owner, owner_id, start_date, last_change_date, data) VALUES ('{type}','{status}','{owner}','{owner_id}','{start_date}','{start_date}','{json.dumps(data)}')""")
+	req_status = None
+	start_date = str(start_date)
 	try:
-		psql_cursor.execute(f"""INSERT INTO "Tasks table" (type, status, owner, owner_id, start_date, last_change_date, data) VALUES ('{type}','{status}','{owner}','{owner_id}','{start_date}','{start_date}','{json.dumps(data)}')""")
+		req_status = database_request(request="""INSERT INTO "Tasks table" (type, status, owner, owner_id, start_date, last_change_date, data)
+				   VALUES (%s,%s,%s,%s,%s,%s,%s)""", data=(type, status, owner, owner_id, start_date, start_date, json.dumps(data)), fetch_type="statusmessage")
 	except psycopg2.OperationalError as e:
 		logging.error(f"Ошибка при отправке запроса SQL {e}")
 	
-	tmp = (psql_cursor.statusmessage or "").split()
+	tmp = (req_status or "").split()
 	if len(tmp) > 0:
 		rowcount = int(tmp[-1]) if tmp[-1].isdigit() else -1
 	else:
 		rowcount = -1
 	
 	if rowcount == 1:
-		psql_cursor.execute(f"""SELECT "id" FROM "Tasks table" WHERE type = '{type}' and status = 'Waiting' and owner = '{owner}' and owner_id = '{owner_id}' and start_date = '{start_date}'""")
-		task_number = psql_cursor.fetchone()[0]
+		task_number = database_request(request="""SELECT "id" FROM "Tasks table"
+				   WHERE type = %s and status = 'Waiting' and owner = %s and owner_id = %s and start_date = %s""", data=(type, owner, owner_id, start_date), fetch_type="one")[0]
 		return task_number
 	else:
 		logging.error(f"Ошибка {rowcount} при отправке запроса SQL")
 	return
 
 async def admin_notification(type_message: str, work_id: int) -> None:
-	psql_cursor.execute(f"""SELECT chat_id FROM "Admins table";""")
-	admin_raw_list = psql_cursor.fetchall()
+	admin_raw_list = database_request(request="""SELECT chat_id FROM "Admins table";""", fetch_type="all")
 	admin_list = [item[0] for item in admin_raw_list]
 	if type_message == "ticket":
 		for admin_chat_id in admin_list:
@@ -1088,8 +1101,8 @@ async def announcement_text_apply(callback: CallbackQuery, state: FSMContext) ->
 		update_session(session_db_redis, callback.from_user.username)
 
 		text = await state.get_data()
-		psql_cursor.execute(f"""SELECT * FROM "Users table";""")
-		users = psql_cursor.fetchall()
+		
+		users = database_request(request="""SELECT * FROM "Users table";""", fetch_type="all")
 		if users:
 			for user in users:
 				await user_notification(chat_id=user[1], text = text, auto_clean=False, parse = None)
@@ -1104,8 +1117,8 @@ async def all_tickets(callback: CallbackQuery, state: FSMContext):
 	state_ticket_action = callback.data.split("_")[2]
 	if state_ticket_action == "0":
 		# Выгрузка первого тикета
-		psql_cursor.execute("""SELECT * FROM "Reports table" LIMIT 1""")
-		result = psql_cursor.fetchone()
+		
+		result = database_request(request="""SELECT * FROM "Reports table" LIMIT 1""", fetch_type="one")
 		if result:
 			ticket_text = result[0]
 			ticket_state = result[1]
