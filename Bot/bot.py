@@ -4,7 +4,6 @@ import logging
 import json
 import sys
 import datetime
-import ipaddress
 
 from hawk_python_sdk import Hawk
 
@@ -18,6 +17,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, CallbackQuery, WebAppInfo, ContentType
 from aiogram.utils.media_group import MediaGroupBuilder
+from aiogram.client.session.aiohttp import AiohttpSession
 
 load_dotenv()
 work_dir = os.path.abspath(os.getcwd())
@@ -155,10 +155,17 @@ else:
 );""")
 	print("Users table - Created")
 
-bot = Bot(token=os.getenv("telegram_api_key"))
+proxy_url = os.getenv("proxy_socks5")
+if proxy_url:
+	session = AiohttpSession(proxy=proxy_url)
+else:
+	session = None
+bot = Bot(token=os.getenv("telegram_api_key"), session=session)
 storage = RedisStorage.from_url(db_redis + os.getenv("redis_FSM_db"))
 dp = Dispatcher(storage = storage)
+
 webapp = WebAppInfo(url=os.getenv("webapp_url"))
+
 
 class network(StatesGroup):
 	menu = State()

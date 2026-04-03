@@ -94,10 +94,10 @@ Option: """)
 							container.rename(name = "itcs_vmpb_timerman_backup")
 
 				print("Start timerman module")
-				os.system("docker run -it -d --env-file .env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vmpb_timerman itcs_vmp_timerman")
+				os.system("docker run -it -d --env-file ../.env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vmpb_timerman itcs_vmp_timerman")
 					
 				print("Start main Bot")
-				os.system("docker run -it -d --env-file .env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_bot itcs_vm_portal")
+				os.system("docker run -it -d --env-file ../.env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_bot itcs_vm_portal")
 				
 				msg = "The bot has been successfully installed and launched"
 
