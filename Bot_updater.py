@@ -34,6 +34,7 @@ Option: """)
 				os.system(github_get)
 				os.system(f"tar --strip-components=1 -xvf {branch}.tar.gz")
 				os.system(f"rm {branch}.tar.gz")
+				os.system("cp requiriments.txt ./Bot/")
 
 				if reset_conf_flag:
 					os.system("mv ./Bot/config.json_sample ./Bot/config.json")
@@ -57,7 +58,7 @@ Option: """)
 							json.dump(config, config_file, indent=4)
 
 				if reset_env_flag:
-					os.system("mv ./Bot/.env_sample ./Bot/.env")
+					os.system("mv ./.env_sample ./.env")
 
 				msg = "Bot downloaded and unpacked"
 
