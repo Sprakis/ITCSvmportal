@@ -100,6 +100,8 @@ Option: """)
 				print("Start main Bot")
 				os.system("docker run -it -d --env-file ../.env -v ./:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_bot itcs_vm_portal")
 				
+				os.system("rm ./Bot/requiriments.txt")
+				
 				msg = "The bot has been successfully installed and launched"
 
 			case 3:
