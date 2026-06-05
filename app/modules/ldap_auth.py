@@ -4,7 +4,7 @@ import logging
 import os
 
 def bot_config_read() -> dict:
-	with open("./config.json") as config_file:
+	with open("config.json") as config_file:
 		return json.load(config_file)
 
 def ldap_logon(credentionals: dict[str]) -> dict:

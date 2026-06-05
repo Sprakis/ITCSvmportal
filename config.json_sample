@@ -1,7 +1,18 @@
 {
-	"logs": {
-		"file": "logs.txt", #main bot logfile
-		"level": "debug" #bot logging level [debug,info,warning,error,crititcal]
+	"app": {
+		"logs": {
+			"file": "logs.txt", #core logfile
+			"level": "debug" #core logging level [debug,info,warning,error,crititcal]
+		},
+		"port": 5000, #network port to connect to core
+		"host": "127.0.0.1", #ip from core access
+		"internal_access": "127.0.0.1" #ip for internal (containers) requests
+	},
+	"tg_bot": {
+		"logs": {
+			"file": "logs.txt", #main bot logfile
+			"level": "debug" #bot logging level [debug,info,warning,error,crititcal]
+		}
 	},
 	"databases": {
 		"redis": {

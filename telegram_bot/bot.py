@@ -2,46 +2,37 @@ import os
 import asyncio
 import logging
 import json
-import sys
 import datetime
-
-from hawk_python_sdk import Hawk
+import requests
 
 from dotenv import load_dotenv
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command, StateFilter
-from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, CallbackQuery, WebAppInfo, ContentType
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup, CallbackQuery, WebAppInfo, ContentType
 from aiogram.utils.media_group import MediaGroupBuilder
 from aiogram.client.session.aiohttp import AiohttpSession
 
 load_dotenv()
-work_dir = os.path.abspath(os.getcwd())
 
-sys.path.append("modules")
-from ldap_auth import ldap_logon
-from session_controller import new_session, update_session, exit_session, load_user_data, check_session
-from netbox_con import get_ip_info, get_vm_info
-from paloalto_con import get_ip_net_info
-
-# hawk = Hawk(os.getenv("HAWK_key"))
+from modules.session_controller import new_session, update_session, exit_session, load_user_data, check_session
 
 admin_list = "Admin"
 
 def bot_config_read() -> dict:
-	with open("./config.json") as config_file:
+	with open("config.json") as config_file:
 		return json.load(config_file)
 
-config = bot_config_read()["databases"]
+config_db = bot_config_read()["databases"]
+config_app = bot_config_read()["app"]
 
 
 import redis
 
-redis_config = config["redis"]
+redis_config = config_db["redis"]
 db_redis = f"redis://:{os.getenv("redis_password")}@{redis_config["url"]}:{redis_config["port"]}/"
 session_db_redis = redis.from_url(db_redis + os.getenv("redis_session_db"))
 tmp_db_redis = redis.from_url(db_redis + os.getenv("redis_tmp_db"))
@@ -52,7 +43,7 @@ def redis_connect() -> bool:
 
 import psycopg2
 
-psql_config = config["psql"]
+psql_config = config_db["psql"]
 psql_conn = psycopg2.connect(user = os.getenv("postsql_username"),
 							password = os.getenv("postsql_password"),
 							host = psql_config["url"],
@@ -76,87 +67,9 @@ def database_request(request: str, fetch_type: str = None, data: dict = None) ->
 			case _:
 				pass
 
-def psql_connect() -> str:
-	return database_request(request="SELECT version();", fetch_type="one")
-
-# psql check_tables
-if bool(database_request(request="""select * from information_schema.tables where table_name='Admins table';""", fetch_type="rowcount")):
-	print("Admins table - Exist")
-else:
-	database_request(request="""CREATE TABLE public."Admins table" (
-	username character varying(24) NOT NULL,
-	chat_id bigint NOT NULL
-);""")
-	print("Admins table - Created")
-
-if bool(database_request(request="""select * from information_schema.tables where table_name='Reports table';""", fetch_type="rowcount")):
-	print("Reports table - Exist")
-else:
-	database_request(request="""CREATE TABLE public."Reports table" (
-	text character varying(4096) NOT NULL,
-	status character varying(6) NOT NULL,
-	attachments_hashs text,
-	chat_id bigint NOT NULL,
-	username character varying(24) NOT NULL,
-	"ID_rep" bigint NOT NULL,
-	PRIMARY KEY ("ID_rep")
-);""")
-	database_request(request="""CREATE SEQUENCE public."Reports table_ID_rep_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	database_request(request="""ALTER SEQUENCE public."Reports table_ID_rep_seq" OWNED BY public."Reports table"."ID_rep";""")
-	database_request(request="""ALTER TABLE IF EXISTS public."Reports table" ALTER COLUMN "ID_rep" SET DEFAULT nextval('"Reports table_ID_rep_seq"'::regclass);""")
-	print("Reports table - Created")
-
-
-if bool(database_request(request="""select * from information_schema.tables where table_name='Requests table';""", fetch_type="rowcount")):
-	print("Requests table - Exist")
-else:
-	database_request(request="""CREATE TABLE public."Requests table" (
-	"ID" bigint NOT NULL,
-	type character varying(6) NOT NULL,
-	owner_ldap_fullname character varying(30),
-	owner_chat_id integer NOT NULL,
-	owner_username character varying(30) NOT NULL,
-	PRIMARY KEY ("ID")
-);""")
-	database_request(request="""CREATE SEQUENCE public."Requests table_ID_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	database_request(request="""ALTER SEQUENCE public."Requests table_ID_seq" OWNED BY public."Requests table"."ID";""")
-	database_request(request="""ALTER TABLE IF EXISTS public."Requests table" ALTER COLUMN "ID" SET DEFAULT nextval('"Requests table_ID_seq"'::regclass);""")
-	print("Requests table - Created")
-
-
-if bool(database_request(request="""select * from information_schema.tables where table_name='Tasks table';""", fetch_type="rowcount")):
-	print("Tasks table - Exist")
-else:
-	database_request(request="""CREATE TABLE public."Tasks table" (
-    id bigint NOT NULL,
-    type character varying(100) NOT NULL,
-    status character varying(12) NOT NULL,
-    owner character varying(100),
-    owner_id bigint NOT NULL,
-    start_date character varying(30) NOT NULL,
-    last_change_date character varying(30) NOT NULL,
-    data text NOT NULL,
-    comment character varying(100),
-    PRIMARY KEY (id)
-);""")
-	database_request(request="""CREATE SEQUENCE public."Tasks table_id_seq" CYCLE INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1;""")
-	database_request(request="""ALTER SEQUENCE public."Tasks table_id_seq" OWNED BY public."Tasks table"."id";""")
-	database_request(request="""ALTER TABLE IF EXISTS public."Tasks table" ALTER COLUMN "id" SET DEFAULT nextval('"Tasks table_id_seq"'::regclass);""")
-	print("Tasks table - Created")
-
-
-if bool(database_request(request="""select * from information_schema.tables where table_name='Users table';""", fetch_type="rowcount")):
-	print("Users table - Exist")
-else:
-	database_request(request="""CREATE TABLE public."Users table" (
-    username character varying NOT NULL,
-    chat_id bigint NOT NULL,
-    domain_username character varying NOT NULL
-);""")
-	print("Users table - Created")
 
 proxy_url = os.getenv("proxy_socks5")
-if proxy_url:
+if len(proxy_url) != 0:
 	session = AiohttpSession(proxy=proxy_url)
 else:
 	session = None
@@ -208,7 +121,7 @@ def menu_buttons_build(access_level: str, path: str):
 
 			# tasks_center_button = InlineKeyboardButton(text = "Просмотр запланированных задач 🗓(НЕ РЕАЛИЗОВАНО)⚠️", callback_data = "notifications_center_menu")
 
-			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢", callback_data = "report_menu")
+			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢 (В разработке⚠️)", callback_data = "report_menu_dev")
 
 			last_update_button = InlineKeyboardButton(text = "Узнать о последнем обновлени ❔", callback_data = "last_update")
 			
@@ -251,8 +164,8 @@ def menu_buttons_build(access_level: str, path: str):
 			clean_ip = InlineKeyboardButton(text = "Освобождение IP ➖ (В разработке)⚠️", callback_data = "clean_ip")
 			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
 			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
-			internet_access = InlineKeyboardButton(text = "Настройка доступа в интернет 🌐", callback_data = "internet_access")
-			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔", callback_data="status_ip")
+			internet_access = InlineKeyboardButton(text = "Настройка доступа в интернет 🌐 (В доработке ⚠️)", callback_data = "internet_access_dev")
+			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔 (В доработке ⚠️)", callback_data="status_ip")
 
 			# buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
 			buttons_finish_list = [[internet_access], [status_ip], [back_button]]
@@ -270,6 +183,24 @@ def menu_buttons_build(access_level: str, path: str):
 			buttons_finish_list = [[info_by_ip], [info_by_vm], [back_button]]
 	
 	return InlineKeyboardMarkup(inline_keyboard = buttons_finish_list)
+
+async def send_core_request(type: str, url: str, payload: dict = None, params: dict = None) -> dict:
+	core_host = f"http://{config_app["internal_access"]}:{config_app["port"]}"
+	headers = {
+		"X-Key": os.getenv("tg_bot_api_key")
+	}
+	match type:
+		case "GET":
+			try:
+				response = requests.get(url=core_host+url, params=params, headers=headers, json=payload)
+			except:
+				return None
+		case "POST":
+			try:
+				response = requests.post(url=core_host+url, params=params, headers=headers, json=payload)
+			except:
+				return None
+	return {"code": response.status_code, "data": response.json()}
 
 async def clean_message(chat_id: int, message_id: int, count: int) -> None:
 	for i in range(count):
@@ -294,7 +225,20 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 	credentionals = json.loads(message.web_app_data.data)
 	chat_id = message.chat.id
 	tg_username = message.chat.username
-	ldap_access, access_level, ldap_username, ldap_fullname = ldap_logon(credentionals)
+
+	credentionals.update({"chat_id": chat_id,
+					  "tg_username": tg_username})
+
+	result = await send_core_request(type="POST", url="/ldap_auth", payload=credentionals)
+	if result["code"] == 200:
+		result = result["data"]
+		ldap_access = result.get("ldap_access")
+		access_level = result.get("access_level")
+		ldap_username = result.get("ldap_username")
+		ldap_fullname = result.get("ldap_fullname")
+	else:
+		await bot.send_message(chat_id = chat_id, text = "Ошибка соединения с ядром", reply_markup = login_keyboard)
+		return
 
 	if ldap_access:
 		if access_level == "User" or access_level == "Admin":
@@ -307,8 +251,6 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 		if new_session(session_db_redis, tg_username, chat_id, ldap_username, ldap_fullname, access_level):
 			await state.set_state(main_states.menu)
 			await bot.send_message(chat_id = chat_id, text = f"Добро пожаловать *{ldap_fullname}*!\nУровень доступа: _{access_level}_", parse_mode = 'Markdown', reply_markup = keyboard)
-			update_admins_table(access_level, tg_username, chat_id)
-			update_users_table(tg_username, chat_id, ldap_fullname)
 		else:
 			logging.debug(f"Ошибка открытия новой сессии для {ldap_username}")
 			await bot.send_message(chat_id = chat_id, text = f"Произошла ошибка при открытии сессии😵‍💫. Пожалуйста обратитесь к администраторам:\n{admin_list}", parse_mode = 'Markdown', reply_markup = login_keyboard)
@@ -320,30 +262,6 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 @dp.callback_query(F.data == "delete_notification")
 async def delete_notification(callback: CallbackQuery) -> None:
 	await clean_message(callback.from_user.id, callback.message.message_id, 1)
-
-def update_admins_table(access_level, tg_username, chat_id) -> None:
-	if database_request(request="""SELECT chat_id FROM "Admins table" WHERE chat_id = %s""", data=(chat_id,), fetch_type="one"):
-		logging.debug(f"Пользователь {tg_username}:{chat_id} найден среди администраторов")
-		if access_level == "User":
-			database_request(request="""DELETE FROM "Admins table" WHERE chat_id = %s""", data=(chat_id,))
-			logging.debug(f"Пользователь {tg_username}:{chat_id} удален из списка администраторов")
-	else:
-		if access_level == "Admin":
-			database_request(request="""INSERT INTO "Admins table" (username, chat_id) VALUES (%s,%s)""", data=(tg_username, chat_id))
-			logging.debug(f"Пользователь {tg_username}:{chat_id} добавлен в список администраторов")
-
-def update_users_table(tg_username: str, chat_id: int, ldap_fullname: str) -> None:
-	result = database_request(request="""SELECT chat_id FROM "Users table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one")
-	if result:
-		logging.debug(f"Пользователь {tg_username}:{chat_id} найден в Users")
-		if (result[0] == tg_username and result[2] == ldap_fullname):
-			logging.debug(f"Изменения в Users для {tg_username}:{chat_id} не требуются")
-		else:
-			logging.debug(f"Пользователь {tg_username}:{chat_id} обновлен")
-			database_request(request="""UPDATE "Users table" SET username = %s, domain_username = %s WHERE chat_id = %s""", data=(tg_username, ldap_fullname, chat_id))
-	else:
-		logging.debug(f"Пользователь {tg_username}:{chat_id} не найден в Users и будет создан")
-		database_request(request="""INSERT INTO "Users table" (username, chat_id, domain_username) VALUES (%s,%s,%s)""", data=(tg_username, chat_id, ldap_fullname))
 
 async def send_report(state_data: dict, user_data: dict) -> None:
 	data_hash = {}
@@ -521,8 +439,6 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 		keyboard = menu_buttons_build(None, "network_menu")
 		
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id, text = "Настройки сети 🌐", reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Настройки сети 🌐", reply_markup = keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -565,8 +481,6 @@ async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
 		
 		keyboard = menu_buttons_build(None, "network_internet_access")
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id, text = "Как будем настраивать? 🔍", reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Как будем настраивать? 🔍", reply_markup = keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -581,8 +495,6 @@ async def internet_vm(callback: CallbackQuery, state: FSMContext) -> None:
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
 							  text = "Введите название виртуальной машины 💻",
 							  reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины 💻", reply_markup = keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -598,8 +510,6 @@ async def internet_ip(callback: CallbackQuery, state: FSMContext) -> None:
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
 							  text = "Введите один или несколько искомых IP-адресов (без указания маски)\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",
 							  reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите один или несколько искомых IP-адресов (без указания маски)\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",parse_mode = 'Markdown', reply_markup = keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -622,7 +532,8 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 		if current_state == "network:internet_access_ip":
 			search_request = batcher(message.text)
 			for address in search_request:
-				net_data = get_ip_info(address)
+				result = await send_core_request(type="GET", url=f"/get_ip_info/{address}")
+				net_data = result["data"]
 				if net_data:
 					if net_data == "Error":
 						await bot.send_message(chat_id = message.chat.id, text = "Ошибка связи с Netbox", reply_markup = keyboard_back)
@@ -639,7 +550,11 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 			
 			await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._", parse_mode='markdown')
 			
-			internet_flags = await get_ip_net_info(search_request)
+			payload = {
+				"ip_list": search_request
+			}
+			result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
+			internet_flags = result["data"]
 			if internet_flags == "Error":
 				await bot.send_message(chat_id = message.chat.id, text = "Ошибка связи с МСЭ", reply_markup = keyboard_back)
 				await clean_message(message.chat.id, message.message_id, 2)
@@ -669,7 +584,11 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 			
 			await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
 		else:
-			vm_data = get_vm_info(message.text)
+			payload = {
+				"vm_name": message.text
+			}
+			result = await send_core_request(type = "GET", url="/get_vm_info", payload=payload)
+			vm_data = result["data"]
 			if len(vm_data) == 0:
 				await bot.send_message(chat_id=message.from_user.id, text = f"Информация о виртуальной машине {message.text} не найдена", reply_markup=keyboard_back)
 				await bot.delete_message(chat_id = message.chat.id, message_id=status_msg.message_id)
@@ -687,7 +606,11 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 				internet_flags = []
 				for ip in vm_data[0]["networks"]:
 					internet_flags.append(ip["address"].split("/")[0])
-				internet_flags = await get_ip_net_info(internet_flags)
+				payload = {
+					"ip_list": internet_flags
+				}
+				result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
+				internet_flags = result["data"]
 				if internet_flags == "Error":
 					await bot.send_message(chat_id = message.chat.id, text = "Ошибка связи с МСЭ", reply_markup = keyboard_back)
 					await clean_message(message.chat.id, message.message_id, 2)
@@ -748,7 +671,11 @@ async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
 		search_index = int(callback.data.split("_", maxsplit=3)[3])
 		state_data = await state.get_data()
 		search_request = state_data[search_index]
-		vm_data = get_vm_info(search_request)
+		payload = {
+			"vm_name": search_request
+		}
+		result = await send_core_request(type = "GET", url="/get_vm_info", payload=payload)
+		vm_data = result["data"]
 
 		operational_data = []
 
@@ -761,7 +688,11 @@ async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
 		internet_flags = []
 		for ip in vm_data[0]["networks"]:
 			internet_flags.append(ip["address"].split("/")[0])
-		internet_flags = await get_ip_net_info(internet_flags)
+		payload = {
+					"ip_list": internet_flags
+		}
+		result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
+		internet_flags = result["data"]
 		if internet_flags == "Error":
 			await bot.send_message(chat_id = callback.from_user.id, text = "Ошибка связи с МСЭ", reply_markup = keyboard_back)
 			await clean_message(callback.from_user.id, callback.message.message_id, 2)
@@ -859,8 +790,6 @@ async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
 							  text = "Что узнаем? 🤔",
 							  reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Что узнаем? 🤔", reply_markup=keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -877,8 +806,6 @@ async def status_ip_ip(callback: CallbackQuery, state: FSMContext) -> None:
 							  text = "Введите запрос для поиска IP-адреса\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54",
 							  parse_mode = 'Markdown',
 							  reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите запрос для поиска IP-адреса\n\n_Несколько адресов можно указать через запятую или диапазон (для последнего октета)_\nНапример: 10.1.102.4, 10.1.102.47 - 54", parse_mode = 'Markdown', reply_markup=keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -894,8 +821,6 @@ async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
 		await bot.edit_message_text(chat_id = callback.from_user.id, message_id = callback.message.message_id,
 							  text = "Введите название виртуальной машины или его часть",
 							  reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Введите название виртуальной машины или его часть", reply_markup=keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
@@ -918,7 +843,8 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 		if current_state == "network:status_ip_ip":
 			raw_ip_data = batcher(message.text)
 			for ip in raw_ip_data:
-				net_data = get_ip_info(ip)
+				result = await send_core_request(type="GET", url=f"/get_ip_info/{ip}")
+				net_data = result["data"]
 				if net_data:
 					if net_data == "Error":
 						await user_notification(chat_id = message.chat.id, text = f"Ошибка связи с netbox", auto_clean = False, parse=None)
@@ -936,7 +862,11 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 					ip_data.append(f"IP: {ip}\nСтатус: Available")
 
 			await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Уточнение наличия выхода в интернет..._",parse_mode='markdown')
-			inet_matrix = await get_ip_net_info(inet_matrix)
+			payload = {
+				"ip_list": inet_matrix
+			}
+			result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
+			inet_matrix = result["data"]
 			if inet_matrix == "Error":
 				await user_notification(chat_id = message.chat.id, text = f"Ошибка связи с МСЭ", auto_clean = False, parse=None)
 				await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
@@ -969,7 +899,7 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 						else:
 							msg += f"\nВладелец: None\nДоступ в интернет: {'✅' if inet_matrix[ip_index - count_avail] else '❌'}"
 					elif len(ip["description"]) != 0:
-						msg += f"\n{net_data["custom_fields"]["Implementation_type"]}: {ip["description"]}"
+						msg += f"\n{ip["custom_fields"]["Implementation_type"]}: {ip["description"]}"
 					else:
 						msg += f"\n{ip["custom_fields"]["Implementation_type"]}: IP не привязан, либо зарезервирован 😥"
 
@@ -994,7 +924,11 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 			except:
 				pass
 		else:
-			vm_data = get_vm_info(message.text)
+			payload = {
+				"vm_name": message.text
+			}
+			result = await send_core_request(type = "GET", url="/get_vm_info", payload=payload)
+			vm_data = result["data"]
 			logging.debug(f"Ответ netbox {vm_data}")
 			if len(vm_data) == 0:
 				msg = "Информация о виртуальной машине не найдена"
@@ -1015,7 +949,11 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 					for ip in vm_name["networks"]:
 						ip_inet_matrix.append(ip["address"].split("/")[0])
 
-				ip_inet_matrix = await get_ip_net_info(ip_inet_matrix)
+				payload = {
+					"ip_list": ip_inet_matrix
+				}
+				result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
+				ip_inet_matrix = result["data"]
 				if ip_inet_matrix == "Error":
 					await user_notification(chat_id = message.chat.id, text = f"Ошибка связи с МСЭ", auto_clean = False, parse=None)
 					await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
@@ -1451,21 +1389,22 @@ async def media_add(callback: CallbackQuery, state: FSMContext) -> None:
 async def last_update_get(callback: CallbackQuery, state: FSMContext) -> None:
 	if check_session(session_db_redis, callback.from_user.username):
 		update_session(session_db_redis, callback.from_user.username)
-
-		with open("./last_update_info.txt", "r") as update_info_file:
-			last_update_data = update_info_file.read()
-
-		await user_notification(chat_id=callback.from_user.id, text = last_update_data, auto_clean=False, parse=None)
+		update_message = await send_core_request(type = "GET", url = "/get_last_update")
+		logging.debug(f"Получен ответ: {update_message}")
+		if update_message:
+			await user_notification(chat_id=callback.from_user.id, text = update_message["data"], auto_clean=False, parse=None)
+		else:
+			await user_notification(chat_id=callback.from_user.id, text = "Ошибка при выполнении запроса :(", auto_clean=False, parse=None)
 
 	else:
 		await end_session_notify(callback, state)
 
 async def main() -> None:
-	config = bot_config_read()["logs"]
+	config_logs = bot_config_read()["tg_bot"]["logs"]
 
 	logging.basicConfig(
-		level = logging.getLevelName(config["level"].upper()),
-		filename = config["file"],
+		level = logging.getLevelName(config_logs["level"].upper()),
+		filename = config_logs["file"],
 		filemode = "a",
 		format="%(asctime)s %(levelname)s %(module)s %(funcName)s %(message)s")
 
@@ -1476,11 +1415,7 @@ async def main() -> None:
 		print("Redis PONG")
 		logging.debug("Redis PONG")
 
-	if psql_connect():
-		print(psql_connect())
-	else:
-		print("PSQL connect error")
-		logging.critical("PSQL connect error")
+	print("Proxy:", os.getenv("proxy_socks5"))
 
 	print("Started")
 	logging.info("Started")

@@ -7,7 +7,7 @@ import logging
 
 
 def bot_config_read() -> dict:
-	with open("./config.json") as config_file:
+	with open("config.json") as config_file:
 		return json.load(config_file)
 
 
@@ -48,7 +48,7 @@ def get_ip_info(ip: str) -> dict:
 	except:
 		return None
 	
-def get_vm_info(vm: str) -> dict:
+def get_vm_info(vm: str) -> list:
 	headers = {
 		"Content-Type": "application/json",
 		"Accept": "application/json",
@@ -108,4 +108,4 @@ def get_vm_info(vm: str) -> dict:
 		return response
 	except Exception as error: 
 		logging.debug(f"Ошибка обработки запроса:\n{error}")
-		return ""
+		return None

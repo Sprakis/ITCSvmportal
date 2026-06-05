@@ -17,7 +17,7 @@ bot = Bot(token=os.getenv("telegram_api_key"))
 
 
 def bot_config_read() -> dict:
-	with open("./config.json") as config_file:
+	with open("config.json") as config_file:
 		return json.load(config_file)
 
 def redis_connect(session_db_redis) -> bool:

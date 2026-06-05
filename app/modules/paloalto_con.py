@@ -6,7 +6,7 @@ urllib3.disable_warnings()
 import logging
 
 def bot_config_read() -> dict:
-	with open("./config.json") as config_file:
+	with open("config.json") as config_file:
 		return json.load(config_file)
 
 def get_api_key() -> str:
