@@ -39,10 +39,10 @@ Option: """)
 		match int(key):
 			case 1:
 				
-				# github_get = f"wget https://github.com/Sprakis/ITCSvmportal/archive/{branch}.tar.gz"
-				# os.system(github_get)
-				# os.system(f"tar --strip-components=1 -xvf {branch}.tar.gz")
-				# os.system(f"rm {branch}.tar.gz")
+				github_get = f"wget https://github.com/Sprakis/ITCSvmportal/archive/{branch}.tar.gz"
+				os.system(github_get)
+				os.system(f"tar --strip-components=1 -xvf {branch}.tar.gz")
+				os.system(f"rm {branch}.tar.gz")
 
 				if reset_conf_flag:
 					os.system("mv ./config.json_sample ./config.json")
