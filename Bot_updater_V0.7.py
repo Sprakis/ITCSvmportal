@@ -10,7 +10,7 @@ def check_versions(container_name: str) -> str:
 	for container in docker_client.containers.list(all = True):
 		if container.name in modules:
 			if container_name in container.name:
-				return container.image.tags[0].split(":")[1]
+				return container.image.tags[-1].split(":")[1]
 	return "Not installed"
 
 def main() -> None:
@@ -100,8 +100,8 @@ Option: """)
 
 				if new_version_core != old_version_core:
 					# Core upgrade
-					os.system("cp requiriments.txt ./app/")
-					os.system("cp config.json ./app/")
+					os.system("cp ../requiriments.txt ./")
+					os.system("cp ../config.json ./")
 					
 					print("Build CORE module")				
 					os.system(f"docker build -t itcs_vm_portal_core:{new_version_core} .")
@@ -122,13 +122,13 @@ Option: """)
 				
 				# TG bot pipline
 				try:
-					os.chdir("../telegram_bot")
+					os.chdir("telegram_bot")
 					with open("version.txt", "r") as version_file:
 						new_version_telegram_bot = version_file.read()
 
 					if new_version_telegram_bot != old_version_telegram_bot:
-						os.system("cp requiriments.txt ./telegram_bot/")
-						os.system("cp config.json ./telegram_bot/")
+						os.system("cp ../requiriments.txt ./")
+						os.system("cp ../config.json ./")
 
 						print("Build TIMERMAN module")
 						os.system("docker build -t itcs_vmp_timerman -f ./modules/Dockerfile_timerman .")
