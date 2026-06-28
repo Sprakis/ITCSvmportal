@@ -98,6 +98,7 @@ class admin_plane(StatesGroup):
 
 class main_states(StatesGroup):
 	menu = State()
+	workaround_auth = State()
 
 class send_report_states(StatesGroup):
 	print_text_report = State()
@@ -123,7 +124,7 @@ def menu_buttons_build(access_level: str, path: str):
 
 			report_button = InlineKeyboardButton(text = "Сообщить о проблеме 📢 (В разработке⚠️)", callback_data = "report_menu_dev")
 
-			last_update_button = InlineKeyboardButton(text = "Узнать о последнем обновлени ❔", callback_data = "last_update")
+			last_update_button = InlineKeyboardButton(text = "Узнать о последнем обновлении ❔", callback_data = "last_update")
 			
 			end_session_button = InlineKeyboardButton(text = "Завершить сессию 🚪", callback_data = "session_end")
 
@@ -165,7 +166,7 @@ def menu_buttons_build(access_level: str, path: str):
 			move_ip = InlineKeyboardButton(text = "Перенос IP адреса 📦 (В разработке)⚠️", callback_data = "move_ip")
 			change_ip = InlineKeyboardButton(text = "Изменение IP 🔄 (В разработке)⚠️", callback_data = "change_ip")
 			internet_access = InlineKeyboardButton(text = "Настройка доступа в интернет 🌐 (В доработке ⚠️)", callback_data = "internet_access_dev")
-			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔 (В доработке ⚠️)", callback_data="status_ip")
+			status_ip = InlineKeyboardButton(text = "Узнать статус IP 🤔", callback_data="status_ip")
 
 			# buttons_finish_list = [[add_ip], [clean_ip], [move_ip], [change_ip], [internet_access], [status_ip], [back_button]]
 			buttons_finish_list = [[internet_access], [status_ip], [back_button]]
@@ -236,6 +237,7 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 		access_level = result.get("access_level")
 		ldap_username = result.get("ldap_username")
 		ldap_fullname = result.get("ldap_fullname")
+		department = result.get("department")
 	else:
 		await bot.send_message(chat_id = chat_id, text = "Ошибка соединения с ядром", reply_markup = login_keyboard)
 		return
@@ -248,7 +250,7 @@ async def web_app_logon(message: Message, state: FSMContext) -> None:
 			await clean_message(message.chat.id, message.message_id, 3)
 			return
 		
-		if new_session(session_db_redis, tg_username, chat_id, ldap_username, ldap_fullname, access_level):
+		if new_session(session_db_redis = session_db_redis, username=tg_username, client="TG", access_level=access_level, chat_id=chat_id, ldap_fullname=ldap_fullname):
 			await state.set_state(main_states.menu)
 			await bot.send_message(chat_id = chat_id, text = f"Добро пожаловать *{ldap_fullname}*!\nУровень доступа: _{access_level}_", parse_mode = 'Markdown', reply_markup = keyboard)
 		else:
@@ -364,9 +366,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 	current_state = await state.get_state()
 
-	if current_state and check_session(session_db_redis, message.chat.username):
+	if current_state and check_session(session_db_redis, message.chat.username, "TG"):
 		await state.set_state(main_states.menu)
-		update_session(session_db_redis, message.chat.username)
+		update_session(session_db_redis, message.chat.username, "TG")
 		await bot.send_message(chat_id = message.chat.id, text = f"Меню доступно через команду /menu или через контекстное меню бота", parse_mode = 'Markdown')
 	else:
 		login_button = [KeyboardButton(text = f"Авторизироваться как {message.chat.username}", web_app = webapp)]
@@ -374,6 +376,61 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 		await state.clear()
 		await message.answer(f"Привет-привет, *{message.chat.username}*! Пожалуйста пройди авторизацию", parse_mode = 'Markdown', reply_markup = login_keyboard)
+
+# Work around WebApp block authorization
+@dp.message(Command(commands=["wa_auth"]))
+async def wa_auth_command_hand(message: Message, state: FSMContext) -> None:
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		await user_notification(chat_id = message.chat.id, text = "Вы уже авторизованы", auto_clean = True, parse=None)
+	else:
+		await state.set_state(main_states.workaround_auth)
+		await message.answer(f"Пожалуйста введите логин и пароль в формате _login:password_", parse_mode = 'Markdown')
+
+@dp.message(F.content_type.in_({'text'}), StateFilter(main_states.workaround_auth))
+async def wa_auth_hand(message: Message, state: FSMContext) -> None:
+	try:
+		credentionals = {
+			"login": message.text.split(":")[0],
+			"pass": message.text.split(":")[1]
+		}
+		chat_id = message.chat.id
+		tg_username = message.chat.username
+
+		credentionals.update({"chat_id": chat_id, 
+						"tg_username": tg_username})
+	except:
+		await clean_message(message.chat.id, message.message_id, 5)
+		await message.answer("Ошибка написания логина и пароля. Пожалуйста, соблюдайте форму _login:password_", parse_mode = 'Markdown')
+	
+	result = await send_core_request(type="POST", url="/ldap_auth", payload=credentionals)
+	if result["code"] == 200:
+		result = result["data"]
+		ldap_access = result.get("ldap_access")
+		access_level = result.get("access_level")
+		ldap_username = result.get("ldap_username")
+		ldap_fullname = result.get("ldap_fullname")
+	else:
+		await bot.send_message(chat_id = chat_id, text = "Ошибка соединения с ядром")
+		return
+	
+	if ldap_access:
+		if access_level == "User" or access_level == "Admin":
+			keyboard = menu_buttons_build(access_level, "main_menu")
+		else:
+			await bot.send_message(chat_id = chat_id, text = "К сожалению у вас нет доступа")
+			await clean_message(message.chat.id, message.message_id, 5)
+			return
+		
+		if new_session(session_db_redis = session_db_redis, username=tg_username, client="TG", access_level=access_level, chat_id=chat_id, ldap_fullname=ldap_fullname):
+			await state.set_state(main_states.menu)
+			await bot.send_message(chat_id = chat_id, text = f"Добро пожаловать *{ldap_fullname}*!\nУровень доступа: _{access_level}_", parse_mode = 'Markdown', reply_markup = keyboard)
+			await clean_message(message.chat.id, message.message_id, 5)
+		else:
+			logging.debug(f"Ошибка открытия новой сессии для {ldap_username}")
+			await bot.send_message(chat_id = chat_id, text = f"Произошла ошибка при открытии сессии😵‍💫. Пожалуйста обратитесь к администраторам:\n{admin_list}", parse_mode = 'Markdown')
+	else:
+		await bot.send_message(chat_id = chat_id, text = "Неверный логин или пароль")
+		await clean_message(message.chat.id, message.message_id, 5)
 
 
 # Debug commands
@@ -392,8 +449,8 @@ async def state_clear(message: Message, state: FSMContext):
 # Main functions
 @dp.callback_query(F.data == "back")
 async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		current_state = await state.get_state()
 
@@ -431,8 +488,8 @@ async def back_step(callback: CallbackQuery, state: FSMContext) -> None:
 # Network menu
 @dp.callback_query(F.data == "network_menu", StateFilter(main_states.menu))
 async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.menu)
 
@@ -444,8 +501,8 @@ async def network_menu(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "network_add_ip", StateFilter(network.menu))
 async def internet_add_ip(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 		
 		await state.set_state(network.add_ip_form)
 
@@ -474,8 +531,8 @@ async def internet_add_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "internet_access", StateFilter(network.menu))
 async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.internet_access)
 		
@@ -486,8 +543,8 @@ async def internet_access(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "internet_vm", StateFilter(network.internet_access))
 async def internet_vm(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.internet_access_vm)
 
@@ -500,8 +557,8 @@ async def internet_vm(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "internet_ip", StateFilter(network.internet_access))
 async def internet_ip(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.internet_access_ip)
 
@@ -515,8 +572,8 @@ async def internet_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.message(F.content_type.in_({'text'}), StateFilter(network.internet_access_ip, network.internet_access_vm))
 async def internet_resp(message: Message, state: FSMContext) -> None:
-	if check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 
 		current_state = await state.get_state()
 		await state.set_state(network.internet_resp)
@@ -660,8 +717,8 @@ async def internet_resp(message: Message, state: FSMContext) -> None:
 
 @dp.callback_query(F.data.startswith("internet_search_vm_"), StateFilter(network.internet_resp))
 async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		status_msg = await bot.send_message(chat_id = callback.from_user.id, text = "_Запрос в базу данных..._", parse_mode='markdown')
 
@@ -722,8 +779,8 @@ async def internet_resp_cal(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data.startswith("internet_flag_"), StateFilter(network.internet_resp))
 async def internet_change_flag(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		internet_flag_index = int(callback.data.split("_")[2])
 		operational_data = await state.get_data()
@@ -754,8 +811,8 @@ async def internet_change_flag(callback: CallbackQuery, state: FSMContext) -> No
 
 @dp.callback_query(F.data == "internet_apply", StateFilter(network.internet_resp))
 async def internet_change_task(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		operational_data = await state.get_data()
 
@@ -780,8 +837,8 @@ async def internet_change_task(callback: CallbackQuery, state: FSMContext) -> No
 
 @dp.callback_query(F.data == "status_ip", StateFilter(network.menu))
 async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.status_ip)
 
@@ -795,8 +852,8 @@ async def status_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "status_ip_ip", StateFilter(network.status_ip))
 async def status_ip_ip(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.status_ip_ip)
 
@@ -811,8 +868,8 @@ async def status_ip_ip(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "status_ip_vm", StateFilter(network.status_ip))
 async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(network.status_ip_vm)
 
@@ -826,8 +883,8 @@ async def status_ip_vm(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.message(F.content_type.in_({'text'}), StateFilter(network.status_ip_ip, network.status_ip_vm))
 async def status_ip_resp(message: Message, state: FSMContext) -> None:
-	if check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 		
 		current_state = await state.get_state()
 		await state.set_state(network.status_ip)
@@ -866,8 +923,9 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 				"ip_list": inet_matrix
 			}
 			result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
-			inet_matrix = result["data"]
-			if inet_matrix == "Error":
+			inet_matrix_pa = result["data"][0]
+			inet_matrix_cp = result["data"][1]
+			if inet_matrix_pa == "Error" or inet_matrix_cp == "Error":
 				await user_notification(chat_id = message.chat.id, text = f"Ошибка связи с МСЭ", auto_clean = False, parse=None)
 				await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
 				await clean_message(message.chat.id, message.message_id, 2)
@@ -895,9 +953,9 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 						for vm_count in range(len(temp)):
 							msg += f"\n{ip["custom_fields"]["Implementation_type"]} {vm_count + 1}: {temp[vm_count]}"
 						if ip["tenant"]:
-							msg += f"\nВладелец: {ip["tenant"]["name"]}\nДоступ в интернет: {'✅' if inet_matrix[ip_index - count_avail] else '❌'}"
+							msg += f"\nВладелец: {ip["tenant"]["name"]}\nДоступ в интернет CP: {'✅' if inet_matrix_cp[ip_index - count_avail] else '❌'}\nДоступ в интернет PA: {'✅' if inet_matrix_pa[ip_index - count_avail] else '❌'}"
 						else:
-							msg += f"\nВладелец: None\nДоступ в интернет: {'✅' if inet_matrix[ip_index - count_avail] else '❌'}"
+							msg += f"\nВладелец: None\nДоступ в интернет CP: {'✅' if inet_matrix_cp[ip_index - count_avail] else '❌'}\nДоступ в интернет PA: {'✅' if inet_matrix_pa[ip_index - count_avail] else '❌'}"
 					elif len(ip["description"]) != 0:
 						msg += f"\n{ip["custom_fields"]["Implementation_type"]}: {ip["description"]}"
 					else:
@@ -953,8 +1011,9 @@ async def status_ip_resp(message: Message, state: FSMContext) -> None:
 					"ip_list": ip_inet_matrix
 				}
 				result = await send_core_request(type="GET", url=f"/get_inet_access", payload=payload)
-				ip_inet_matrix = result["data"]
-				if ip_inet_matrix == "Error":
+				ip_inet_matrix_pa = result["data"][0]
+				ip_inet_matrix_cp = result["data"][1]
+				if ip_inet_matrix_pa == "Error" or ip_inet_matrix_cp == "Error":
 					await user_notification(chat_id = message.chat.id, text = f"Ошибка связи с МСЭ", auto_clean = False, parse=None)
 					await bot.send_message(chat_id = message.chat.id, text = "Что узнаем? 🤔", reply_markup = keyboard)
 					await clean_message(message.chat.id, message.message_id, 2)
@@ -976,7 +1035,7 @@ IP: {ip["address"]}
 """
 						for vm_cluster_count in range(len(ip["Machine_Name"])):
 							msg += f"Нода {vm_cluster_count + 1}: {ip["Machine_Name"][vm_cluster_count]}\n"
-						msg += f"Доступ в интернет: {'✅' if ip_inet_matrix[vm_name["networks"].index(ip)] else '❌'}\n"
+						msg += f"Доступ в интернет CP: {'✅' if ip_inet_matrix_cp[vm_name["networks"].index(ip)] else '❌'}\nДоступ в интернет PA: {'✅' if ip_inet_matrix_pa[vm_name["networks"].index(ip)] else '❌'}\n"
 				
 				await bot.edit_message_text(chat_id = message.chat.id, message_id=status_msg.message_id, text = "_Подготовка данных..._",parse_mode='markdown')
 
@@ -1000,23 +1059,21 @@ IP: {ip["address"]}
 # Admin menu
 @dp.callback_query(F.data == "admin_plane_menu", StateFilter(main_states.menu))
 async def admin_plane_menu(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(admin_plane.menu)
 
 		keyboard = menu_buttons_build("Admin", "admin_plane")
 
 		await bot.edit_message_text(chat_id =callback.from_user.id, message_id = callback.message.message_id, text = "Панель Администратора👑", reply_markup = keyboard)
-		# await bot.send_message(chat_id = callback.from_user.id, text = "Панель Администратора👑", reply_markup = keyboard)
-		# await clean_message(callback.from_user.id, callback.message.message_id, 1)
 	else:
 		await end_session_notify(callback, state)
 
 @dp.callback_query(F.data == "announcement", StateFilter(admin_plane.menu))
 async def announcement_text(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(admin_plane.announcement)
 
@@ -1028,8 +1085,8 @@ async def announcement_text(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.message(F.content_type.in_({'text'}), StateFilter(admin_plane.announcement))
 async def announcement_text_preview(message: Message, state: FSMContext) -> None:
-	if check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 
 		keyboard = menu_buttons_build(None, "announcement_preview")
 
@@ -1042,8 +1099,8 @@ async def announcement_text_preview(message: Message, state: FSMContext) -> None
 
 @dp.callback_query(F.data == "announcement_apply", StateFilter(admin_plane.announcement))
 async def announcement_text_apply(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		text = await state.get_data()
 		
@@ -1105,10 +1162,10 @@ async def main_menu(message: Message, state: FSMContext) -> None:
 		
 	current_state = await state.get_state()
 	
-	if current_state and check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if current_state and check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 		await state.set_state(main_states.menu)
-		user_data = load_user_data(session_db_redis, message.chat.username, ["ldap_fullname", "access_level"])
+		user_data = load_user_data(session_db_redis, message.chat.username, "TG", ["ldap_fullname", "access_level"])
 		await bot.send_message(chat_id = message.chat.id, text = f"Добро пожаловать *{user_data["ldap_fullname"]}*!\nУровень доступа: _{user_data["access_level"]}_", parse_mode = 'Markdown', reply_markup = menu_buttons_build(user_data["access_level"], "main_menu"))
 	else:
 		await end_session_notify(message, state)
@@ -1116,12 +1173,12 @@ async def main_menu(message: Message, state: FSMContext) -> None:
 	await clean_message(message.chat.id, message.message_id, 3)
 
 async def main_menu_cal(callback: CallbackQuery, state: FSMContext) -> None:	
-	update_session(session_db_redis, callback.from_user.username)
+	update_session(session_db_redis, callback.from_user.username, "TG")
 
 	await state.clear()
 	await state.set_state(main_states.menu)
 	
-	user_data = load_user_data(session_db_redis, callback.from_user.username, ["ldap_fullname", "access_level"])
+	user_data = load_user_data(session_db_redis, callback.from_user.username, "TG", ["ldap_fullname", "access_level"])
 	await bot.send_message(chat_id = callback.from_user.id,
 						text = f"Добро пожаловать *{user_data["ldap_fullname"]}*!\nУровень доступа: _{user_data["access_level"]}_",
 						parse_mode = 'Markdown',
@@ -1132,13 +1189,13 @@ async def main_menu_cal(callback: CallbackQuery, state: FSMContext) -> None:
 # Report menu
 @dp.callback_query(F.data == 'send_report', StateFilter(send_report_states.verify_report))
 async def send_report_notify(callback: CallbackQuery, state: FSMContext) -> None:
-	update_session(session_db_redis, callback.from_user.username)
+	update_session(session_db_redis, callback.from_user.username, "TG")
 
 	state_data = await state.get_data()
 	await state.clear()
 	await state.set_state(main_states.menu)
 
-	user_data = load_user_data(session_db_redis, callback.from_user.username, ["chat_id", "tg_username", "ldap_fullname", "access_level"])
+	user_data = load_user_data(session_db_redis, callback.from_user.username, "TG", ["chat_id", "tg_username", "ldap_fullname", "access_level"])
 	report_num = await send_report(state_data, user_data)
 
 	logging.debug(f"Пользователь {callback.from_user.username} отправил репорт. State={await state.get_state()}. State_data={state_data}")
@@ -1151,7 +1208,7 @@ async def send_report_notify(callback: CallbackQuery, state: FSMContext) -> None
 async def end_user_session(callback: CallbackQuery, state: FSMContext) -> None:
 	username = callback.from_user.username
 
-	if exit_session(session_db_redis, username):
+	if exit_session(session_db_redis, username, "TG"):
 		login_button = [KeyboardButton(text = f"Авторизироваться как {username}", web_app = webapp)]
 		login_keyboard = ReplyKeyboardMarkup(keyboard = [login_button], resize_keyboard=True)
 
@@ -1169,8 +1226,8 @@ async def end_user_session(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == 'report_menu', StateFilter(main_states.menu, send_report_states.verify_report))
 async def text_report(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 		
 		await state.set_state(send_report_states.print_text_report)
 
@@ -1189,8 +1246,8 @@ async def text_report(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.message(F.content_type.in_({'text'}), StateFilter(send_report_states.print_text_report))
 async def report_preview(message: Message, state: FSMContext) -> None:
-	if check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 		
 		await state.set_state(send_report_states.verify_report)
 		if message.text:
@@ -1210,8 +1267,8 @@ async def report_preview(message: Message, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == 'exit_changes', StateFilter(send_report_states.media_verify))
 async def report_preview_cal(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(send_report_states.verify_report)
 		
@@ -1243,8 +1300,8 @@ async def report_preview_cal(callback: CallbackQuery, state: FSMContext) -> None
 
 @dp.callback_query(F.data == 'change_picture', StateFilter(send_report_states.verify_report))
 async def media_verify(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(send_report_states.media_verify)
 		state_data = await state.get_data()
@@ -1266,8 +1323,8 @@ async def media_verify(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.message(F.content_type.in_({'photo', 'video', 'text'}), StateFilter(send_report_states.media_add, send_report_states.media_del))
 async def media_verify_msg(message: Message, state: FSMContext) -> None:
-	if check_session(session_db_redis, message.chat.username):
-		update_session(session_db_redis, message.chat.username)
+	if check_session(session_db_redis, message.chat.username, "TG"):
+		update_session(session_db_redis, message.chat.username, "TG")
 
 		await state.set_state(send_report_states.media_verify)
 
@@ -1351,8 +1408,8 @@ async def media_verify_msg(message: Message, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == 'delete_media', StateFilter(send_report_states.media_verify))
 async def media_del(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		
 
@@ -1370,8 +1427,8 @@ async def media_del(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == 'add_media', StateFilter(send_report_states.media_verify))
 async def media_add(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 
 		await state.set_state(send_report_states.media_add)
 
@@ -1387,8 +1444,8 @@ async def media_add(callback: CallbackQuery, state: FSMContext) -> None:
 
 @dp.callback_query(F.data == "last_update", StateFilter(main_states.menu))
 async def last_update_get(callback: CallbackQuery, state: FSMContext) -> None:
-	if check_session(session_db_redis, callback.from_user.username):
-		update_session(session_db_redis, callback.from_user.username)
+	if check_session(session_db_redis, callback.from_user.username, "TG"):
+		update_session(session_db_redis, callback.from_user.username, "TG")
 		update_message = await send_core_request(type = "GET", url = "/get_last_update")
 		logging.debug(f"Получен ответ: {update_message}")
 		if update_message:

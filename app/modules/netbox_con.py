@@ -12,7 +12,7 @@ def bot_config_read() -> dict:
 
 
 
-def get_ip_info(ip: str) -> dict:
+def get_ip_info(ip: str) -> dict | str | None:
 	headers = {"Content-Type": "application/json",
 			"Accept": "application/json",
 			"Authorization": f"Token {os.getenv("netbox_api_key")}"}
@@ -40,7 +40,8 @@ def get_ip_info(ip: str) -> dict:
 	logging.debug(f"Запрос в Netbox: https://{config["address"]}/graphql/\nHeaders: {headers}\nPayload: {body}")
 	try:
 		response = requests.post(url = f"https://{config["address"]}/graphql/", headers=headers, json = body, verify=False)
-	except:
+	except Exception as e:
+		logging.error(f"Ошибка запроса в Netbox {e}")
 		return "Error"
 	logging.debug(f"Успешный запрос! Код: {response.status_code} | Ответ: {response.text}")
 	try:

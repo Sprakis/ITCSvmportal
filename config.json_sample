@@ -26,6 +26,7 @@
 	},
 	"ldap": {
 		"ip": ["10.1.101.5", "10.1.101.6"], #ldap dc IPs
+		"LDAPS": true, #LDAPS use flag
 		"user_group": "ISS_vmPB_user", #ldap users group name
 		"admin_group": "ISS_vmPB_admin" #ldap admins group name
 	},
@@ -41,6 +42,10 @@
 		"internet_group_tag": "tag1", #Tag for objects group with internet access
 		"internet_objects_tag": "tag2" #Tag for objects with internet access
 	},
+	 "check_point": {
+        "ip": "192.168.1.1", # Check Point SMS ip
+        "internet_group": "G_internet_access" #Name for ip address group with internet access
+    },
 	"timerman": {
 		"logs": {
 			"file": "timerman_logs.txt", #timerman module logfile

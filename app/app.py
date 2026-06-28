@@ -2,7 +2,6 @@ import uvicorn
 import json
 import logging
 import os
-import sys
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import APIKeyHeader
@@ -12,7 +11,8 @@ from dotenv import load_dotenv
 
 from modules.ldap_auth import ldap_logon
 from modules.netbox_con import get_ip_info, get_vm_info
-from modules.paloalto_con import get_ip_net_info
+from modules.paloalto_con import get_ip_net_info_pa
+from modules.checkpoint_con import get_ip_net_info_cp
 
 class ip_list_item(BaseModel):
 	ip_list: list
@@ -82,7 +82,8 @@ def database_init() -> None:
 	else:
 		database_request(request="""CREATE TABLE public."Admins table" (
 		username character varying(24) NOT NULL,
-		chat_id bigint NOT NULL
+		chat_id bigint NOT NULL,
+		department text
 	);""")
 		print("Admins table - Created")
 	
@@ -149,64 +150,74 @@ def database_init() -> None:
 		database_request(request="""CREATE TABLE public."Users table" (
     	username character varying NOT NULL,
     	chat_id bigint NOT NULL,
-    	domain_username character varying NOT NULL
+    	domain_username character varying NOT NULL,
+		department text,
+		notification_app text
 	);""")
 		print("Users table - Created")
 
 # Service functions
-def update_admins_table(access_level, tg_username, chat_id) -> None:
-	if database_request(request="""SELECT chat_id FROM "Admins table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one"):
+def update_admins_table(access_level, tg_username, chat_id, department) -> None:
+	result = database_request(request="""SELECT username, department FROM "Admins table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one")
+	if result:
 		logging.debug(f"Пользователь {tg_username}:{chat_id} найден среди администраторов")
 		if access_level == "User":
 			database_request(request="""DELETE FROM "Admins table" WHERE chat_id = %s""", data=(chat_id))
 			logging.debug(f"Пользователь {tg_username}:{chat_id} удален из списка администраторов")
+		elif access_level == "Admin":
+			if (result[0] == tg_username and result[1] == department):
+				logging.debug(f"Изменения в списке администраторов для {tg_username}:{chat_id} не требуются")
+			else:
+				logging.debug(f"Пользователь {tg_username}:{chat_id} обновлен в списку администраторов")
+				database_request(request="""UPDATE "Admins table" SET username = %s, department = %s WHERE chat_id = %s""", data=(tg_username, department, chat_id))
 	else:
 		if access_level == "Admin":
-			database_request(request="""INSERT INTO "Admins table" (username, chat_id) VALUES (%s,%s)""", data=(tg_username, chat_id))
+			database_request(request="""INSERT INTO "Admins table" (username, chat_id, department) VALUES (%s,%s,%s)""", data=(tg_username, chat_id, department))
 			logging.debug(f"Пользователь {tg_username}:{chat_id} добавлен в список администраторов")
 
-def update_users_table(tg_username: str, chat_id: int, ldap_fullname: str) -> None:
-	result = database_request(request="""SELECT chat_id FROM "Users table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one")
+def update_users_table(tg_username: str, chat_id: int, ldap_fullname: str, department: str) -> None:
+	result = database_request(request="""SELECT username, domain_username, department FROM "Users table" WHERE chat_id = %s""", data=(chat_id), fetch_type="one")
 	if result:
 		logging.debug(f"Пользователь {tg_username}:{chat_id} найден в Users")
-		if (result[0] == tg_username and result[2] == ldap_fullname):
+		if (result[0] == tg_username and result[1] == ldap_fullname, result[2] == department):
 			logging.debug(f"Изменения в Users для {tg_username}:{chat_id} не требуются")
 		else:
 			logging.debug(f"Пользователь {tg_username}:{chat_id} обновлен")
-			database_request(request="""UPDATE "Users table" SET username = %s, domain_username = %s WHERE chat_id = %s""", data=(tg_username, ldap_fullname, chat_id))
+			database_request(request="""UPDATE "Users table" SET username = %s, domain_username = %s, department = %s WHERE chat_id = %s""", data=(tg_username, ldap_fullname, department, chat_id))
 	else:
 		logging.debug(f"Пользователь {tg_username}:{chat_id} не найден в Users и будет создан")
-		database_request(request="""INSERT INTO "Users table" (username, chat_id, domain_username) VALUES (%s,%s,%s)""", data=(tg_username, chat_id, ldap_fullname))
+		database_request(request="""INSERT INTO "Users table" (username, chat_id, domain_username, department, notification_app) VALUES (%s,%s,%s,%s,%s)""", data=(tg_username, chat_id, ldap_fullname, department, "TG"))
 
 # Main requests
 @app.post("/ldap_auth")
 async def ldap_auth(credentionals: dict, key=Depends(read_key)) -> dict:
-	ldap_access, access_level, ldap_username, ldap_fullname = ldap_logon(credentionals)
+	ldap_access, access_level, ldap_username, ldap_fullname, department = ldap_logon(credentionals)
 	
 	chat_id = credentionals.get("chat_id")
 	tg_username = credentionals.get("tg_username")
 
-	if ldap_access:
-		update_admins_table(access_level, tg_username, chat_id)
-		update_users_table(tg_username, chat_id, ldap_fullname)
+	if ldap_access and access_level:
+		update_admins_table(access_level, tg_username, chat_id, department)
+		update_users_table(tg_username, chat_id, ldap_fullname, department)
 	
 	result = {
 		"ldap_access": ldap_access,
 		"access_level": access_level,
 		"ldap_username": ldap_username,
-		"ldap_fullname": ldap_fullname
+		"ldap_fullname": ldap_fullname,
+		"department": department
 	}
 	return result
 
 @app.get("/get_ip_info/{ip}")
-async def core_get_ip_info(ip: str, key=Depends(read_key)) -> dict | None:
-	print(ip)
+async def core_get_ip_info(ip: str, key=Depends(read_key)) -> dict | None | str:
 	return get_ip_info(ip)
 
 @app.get("/get_inet_access")
 async def core_get_inet_access(payload: ip_list_item, key=Depends(read_key)) -> list:
-	result = await get_ip_net_info(payload.ip_list)
-	return result
+	result_pa = await get_ip_net_info_pa(payload.ip_list)
+	result_cp = await get_ip_net_info_cp(payload.ip_list)
+	return [result_pa, result_cp]
 
 @app.get("/get_vm_info")
 async def core_get_vm_info(payload: vm_name_item, key=Depends(read_key)) -> list | None:

@@ -7,7 +7,7 @@ def bot_config_read() -> dict:
 	with open("config.json") as config_file:
 		return json.load(config_file)
 
-def ldap_logon(credentionals: dict[str]) -> dict:
+def ldap_logon(credentionals: dict[str]) -> tuple:
 	# Получение учетных данных пользователя
 	user_username = credentionals["login"]
 	user_password = credentionals["pass"]
@@ -30,18 +30,25 @@ def ldap_logon(credentionals: dict[str]) -> dict:
 
 	# Последовательная проверка авторизации на контроллерах домена
 	for ldap_ip in config["ip"]:
-		ldap_server = Server(ldap_ip)
+		ldap_server = Server(ldap_ip, use_ssl=True)
 		logging.debug(f"Новое LDAP соединение: LDAP://{ldap_ip}@{domain}\\{user_username}")
 		ldap_conn = Connection(ldap_server, user= f"{domain}\\{user_username}", password = user_password)
 		# Проверка логина
 		if ldap_conn.bind():
 			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username} авторизация успешна")
 			# Выгрузка атрибутов с ldap сервера
-			ldap_conn.search(search_base=f'{dc_str}', search_filter=f"(sAMAccountName={user_username})", attributes = ["memberOf", "cn"])
+			ldap_conn.search(search_base=f'{dc_str}', search_filter=f"(sAMAccountName={user_username})", attributes = ["memberOf", "sAMAccountName", "distinguishedName"])
 			dn_user = ldap_conn.response[0]['dn']
 			user_member_groups = ldap_conn.response[0]['attributes']['memberOf']
-			fullname = ldap_conn.response[0]['attributes']['cn']
-			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nDN={dn_user}\nUser groups={user_member_groups}\nFullname={fullname}")
+			fullname = ldap_conn.response[0]['attributes']['sAMAccountName']
+			distinguishedName = ldap_conn.response[0]['attributes']['distinguishedName']
+			try:
+				department = distinguishedName.split(",")[2].split("=")[1]
+			except Exception as e:
+				department = f"Error {e}: {department}"
+				logging.error(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nDN={dn_user}\nUser groups={user_member_groups}\nFullname={fullname}\nDepartment={department}")
+				return 0, None, user_username, None, None
+			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nDN={dn_user}\nUser groups={user_member_groups}\nFullname={fullname}\nDepartment={department}")
 
 			for member_group in user_member_groups:
 				if user_group in member_group:
@@ -53,7 +60,7 @@ def ldap_logon(credentionals: dict[str]) -> dict:
 				else:
 					group = None
 			logging.debug(f"LDAP://{ldap_ip}@{domain}\\{user_username}:\nUser Priv={group}")
-			return 1, group, user_username, fullname
+			return 1, group, user_username, fullname, department
 		else:
 			logging.debug(f"Неверные данные для LDAP://{ldap_ip}@{domain}\\{user_username}")
-	return 0, None, user_username, None
+	return 0, None, user_username, None, None

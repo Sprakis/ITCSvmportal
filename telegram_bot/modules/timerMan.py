@@ -11,6 +11,8 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, Inlin
 
 from paloalto_con import change_internet_on_ip
 
+from session_controller import exit_session
+
 load_dotenv()
 
 bot = Bot(token=os.getenv("telegram_api_key"))
@@ -78,12 +80,9 @@ async def session_killer() -> None:
 			time_calc = datetime.datetime.strptime(session_db_redis.hget(session_hash, "session_update_time"), '%Y-%m-%d %H:%M:%S.%f') + datetime.timedelta(seconds = time_out)
 			if time_calc <= datetime.datetime.now():
 				try:
-					session_db_redis.lrem("active_sessions", 0, session_hash)
-					logging.info(f"Сессия {session_hash} удалена из активных")
 					chat_id = session_db_redis.hget(session_hash, "chat_id")
-					username = session_db_redis.hget(session_hash, "tg_username")
-					session_db_redis.hdel(session_hash, 'tg_username', 'chat_id', 'ldap_username', 'ldap_fullname', 'access_level', 'session_update_time')
-					logging.debug(f"Данные сессии {session_hash} удалены")
+					username = session_db_redis.hget(session_hash, "username")
+					exit_session(session_db_redis, None, None, session_hash)
 				except:
 					logging.error(f"Ошибка при авточистке сессии {session_hash}")
 					pass

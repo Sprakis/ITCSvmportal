@@ -48,7 +48,7 @@ def commit(api_key: str) -> bool:
 	else:
 		return False
 
-async def ip_deep_search(members: list, answer: list, api_key, config) -> list:
+async def ip_deep_search(members: list, answer: list, api_key: str, config) -> list:
 	headers = {
 		"X-PAN-KEY": api_key
 	}
@@ -83,7 +83,7 @@ def get_ip_address_list(api_key: str) -> list:
 	logging.debug(f"Успешный запрос! Код: {response.status_code} | Ответ: {response.text}")
 	return response.json()["result"]["entry"]
 
-async def get_ip_net_info(ip_list: list) -> list:
+async def get_ip_net_info_pa(ip_list: list) -> list:
 	config = bot_config_read()["paloalto"]
 	api_key = get_api_key()
 	if api_key == "Error":

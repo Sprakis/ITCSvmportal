@@ -73,84 +73,88 @@ Option: """)
 				with open("./config.json", 'w') as config_file:
 					json.dump(config, config_file, indent=4)
 				
-
-				os.system("cp requiriments.txt ./app/")
-				os.system("cp config.json ./app/")
-
-				try:
-					os.system("cp requiriments.txt ./telegram_bot/")
-					os.system("cp config.json ./telegram_bot/")
-				except:
-					pass
-
-				# Core
-				print("Build CORE module")
-				os.chdir("./app")
-
-				with open("./version.txt", "r") as version_file:
-					version_core = version_file.read()
-
-				os.system(f"docker build -t itcs_vm_portal_core:{version_core} .")
+				docker_containers = docker_client.containers.list(all = True)
 				
-				# TG bot
-				try:
-					print("Build TIMERMAN module")
-					os.chdir("../telegram_bot")
-
-					os.system("docker build -t itcs_vmp_timerman -f ./modules/Dockerfile_timerman .")
-
-
-					print("Build TELEGRAM BOT module")
-
-					with open("./version.txt", "r") as version_file:
-						version_telegram_bot = version_file.read()
-
-					os.system(f"docker build -t itcs_vm_portal_telegram_bot:{version_telegram_bot} .")
-				except:
-					pass
-
-				docker_client = docker.DockerClient(base_url = 'unix:///var/run/docker.sock')
-
-				print("Delete backups")
-				for container in docker_client.containers.list(all = True):
-					if container.name == "itcs_vm_portal_core_backup":
-						container.remove(v = True)
-					if container.name == "itcs_vmpb_timerman_backup":
-						container.remove(v = True)
-					if container.name == "itcs_vm_portal_telegram_bot_backup":
-						container.remove(v = True) 
-
-				msg = "Backup containers successfully deleted"
-
-				print("Backups containers")
-
-				for container in docker_client.containers.list(all = True):
+				for container in docker_containers:
 					if container.name == "itcs_vm_portal_core":
-						container.stop()
-						container.rename(name = "itcs_vm_portal_core_backup")
+						old_version_core = container.image.tags[0].split(":")[1]
+						core_container = container
+					if container.name == "itcs_vm_portal_core_backup":
+						core_backup_container = container
+
 					if container.name == "itcs_vm_portal_telegram_bot":
-						container.stop()
-						container.rename(name = "itcs_vm_portal_telegram_bot_backup")
+						old_version_telegram_bot = container.image.tags[0].split(":")[1]
+						tg_bot_container = container
+					if container.name == "itcs_vm_portal_telegram_bot_backup":
+						tg_bot_backup_container = container
+
 					if container.name == "itcs_vmpb_timerman":
-						container.stop()
-						container.rename(name = "itcs_vmpb_timerman_backup")
-
-				os.chdir("..")
-
-				print("Start core module")
-				app_port = config["app"]["port"]
-				os.system(f"docker run -it -d --env-file .env -v ./app/:/app/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_core -p {app_port}:{app_port} itcs_vm_portal_core:{version_core}")
-
-				print("Start timerman module")
-				os.system("docker run -it -d --env-file .env -v ./telegram_bot/:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vmpb_timerman itcs_vmp_timerman")
+						timerman_container = container
+					if container.name == "itcs_vmpb_timerman_backup":
+						timerman_backup_container = container
 					
-				print("Start telegram bot")
-				os.system(f"docker run -it -d --env-file .env -v ./telegram_bot/:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_telegram_bot itcs_vm_portal_telegram_bot:{version_telegram_bot}")
-				
-				os.system("rm ./app/requiriments.txt")
+				# Core pipeline
+				os.chdir("./app")
+				with open("version.txt", "r") as version_file:
+					new_version_core = version_file.read()
 
+				if new_version_core != old_version_core:
+					# Core upgrade
+					os.system("cp requiriments.txt ./app/")
+					os.system("cp config.json ./app/")
+					
+					print("Build CORE module")				
+					os.system(f"docker build -t itcs_vm_portal_core:{new_version_core} .")
+					
+					print("Delete old CORE backup")
+					core_backup_container.remove(v = True)
+
+					print("Backup CORE")
+					core_container.stop()
+					core_container.rename(name = "itcs_vm_portal_core_backup")
+
+					print("Start CORE")
+					os.chdir("..")
+					app_port = config["app"]["port"]
+					os.system(f"docker run -it -d --env-file .env -v ./app/:/app/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_core -p {app_port}:{app_port} itcs_vm_portal_core:{new_version_core}")
+					os.system("rm ./app/requiriments.txt")
+				
+				
+				# TG bot pipline
 				try:
-					os.system("rm ./telegram_bot/requiriments.txt")
+					os.chdir("../telegram_bot")
+					with open("version.txt", "r") as version_file:
+						new_version_telegram_bot = version_file.read()
+
+					if new_version_telegram_bot != old_version_telegram_bot:
+						os.system("cp requiriments.txt ./telegram_bot/")
+						os.system("cp config.json ./telegram_bot/")
+
+						print("Build TIMERMAN module")
+						os.system("docker build -t itcs_vmp_timerman -f ./modules/Dockerfile_timerman .")
+
+						print("Delete old TIMERMAN backup")
+						timerman_backup_container.remove(v = True)
+
+						print("Build TELEGRAM BOT module")
+						os.system(f"docker build -t itcs_vm_portal_telegram_bot:{new_version_telegram_bot} .")
+
+						print("Delete old TELEGRAM BOT backup")
+						tg_bot_backup_container.remove(v = True)
+
+						print("Backup TIMERMAN and TELEGRAM BOT")
+						timerman_container.stop()
+						timerman_container.rename(name = "itcs_vmpb_timerman_backup")
+						tg_bot_container.stop()
+						tg_bot_container.rename(name = "itcs_vm_portal_telegram_bot_backup")
+
+						print("Start TIMERMAN module")
+						os.chdir("..")
+						os.system("docker run -it -d --env-file .env -v ./telegram_bot/:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vmpb_timerman itcs_vmp_timerman")
+
+						print("Start TELEGRAM BOT")
+						os.system(f"docker run -it -d --env-file .env -v ./telegram_bot/:/bot/ -v /var/log/ITCS_vmpb/:/var/log/ITCS_vmpb/ --restart=unless-stopped --name itcs_vm_portal_telegram_bot itcs_vm_portal_telegram_bot:{new_version_telegram_bot}")
+						os.system("rm ./telegram_bot/requiriments.txt")
 				except:
 					pass
 				
